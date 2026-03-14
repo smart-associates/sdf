@@ -23,7 +23,6 @@ async def seed_defaults():
 
     defaults = [
         ("batch_size", "1000", "Number of rows per INSERT batch", "integer"),
-        ("parallel_tables", "2", "Max tables migrated concurrently (future)", "integer"),
     ]
     async with AsyncSessionLocal() as db:
         for key, value, desc, dtype in defaults:

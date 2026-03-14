@@ -1,4 +1,5 @@
 import sqlalchemy as sa
+from sqlalchemy.engine import URL
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -7,16 +8,32 @@ from app.models.connection import DatabaseConnection
 from app.services.encryption import encrypt, decrypt, mask, is_masked, MASKED
 
 DEFAULT_PORTS = {"postgresql": 5432, "mysql": 3306, "mssql": 1433}
+_DRIVERS = {
+    "postgresql": "postgresql+psycopg2",
+    "mysql": "mysql+pymysql",
+    "mssql": "mssql+pymssql",
+}
+
 
 def get_jdbc_url(conn: DatabaseConnection, plaintext_password: str) -> str:
+    if conn.db_type not in _DRIVERS:
+        raise ValueError(f"Unknown db_type: {conn.db_type}")
     port = conn.port or DEFAULT_PORTS.get(conn.db_type, 5432)
-    if conn.db_type == "postgresql":
-        return f"postgresql+psycopg2://{conn.username}:{plaintext_password}@{conn.host}:{port}/{conn.database}"
-    elif conn.db_type == "mysql":
-        return f"mysql+pymysql://{conn.username}:{plaintext_password}@{conn.host}:{port}/{conn.database}"
-    elif conn.db_type == "mssql":
-        return f"mssql+pymssql://{conn.username}:{plaintext_password}@{conn.host}:{port}/{conn.database}"
-    raise ValueError(f"Unknown db_type: {conn.db_type}")
+    url = URL.create(_DRIVERS[conn.db_type], username=conn.username,
+                     password=plaintext_password, host=conn.host,
+                     port=port, database=conn.database)
+    return str(url)
+
+
+def _build_engine(conn: DatabaseConnection, plaintext_password: str):
+    if conn.db_type not in _DRIVERS:
+        raise ValueError(f"Unknown db_type: {conn.db_type}")
+    port = conn.port or DEFAULT_PORTS.get(conn.db_type, 5432)
+    url = URL.create(_DRIVERS[conn.db_type], username=conn.username,
+                     password=plaintext_password, host=conn.host,
+                     port=port, database=conn.database)
+    return sa.create_engine(url, pool_pre_ping=True)
+
 
 async def list_connections(db: AsyncSession) -> list[DatabaseConnection]:
     result = await db.execute(select(DatabaseConnection).order_by(DatabaseConnection.id))
@@ -25,6 +42,7 @@ async def list_connections(db: AsyncSession) -> list[DatabaseConnection]:
         c.password = MASKED
     return list(conns)
 
+
 async def get_connection(db: AsyncSession, conn_id: int) -> Optional[DatabaseConnection]:
     result = await db.execute(select(DatabaseConnection).where(DatabaseConnection.id == conn_id))
     conn = result.scalar_one_or_none()
@@ -32,9 +50,11 @@ async def get_connection(db: AsyncSession, conn_id: int) -> Optional[DatabaseCon
         conn.password = MASKED
     return conn
 
+
 async def get_connection_raw(db: AsyncSession, conn_id: int) -> Optional[DatabaseConnection]:
     result = await db.execute(select(DatabaseConnection).where(DatabaseConnection.id == conn_id))
     return result.scalar_one_or_none()
+
 
 async def create_connection(db: AsyncSession, data: dict) -> DatabaseConnection:
     data = data.copy()
@@ -46,6 +66,7 @@ async def create_connection(db: AsyncSession, data: dict) -> DatabaseConnection:
     await db.refresh(conn)
     conn.password = MASKED
     return conn
+
 
 async def update_connection(db: AsyncSession, conn_id: int, data: dict) -> Optional[DatabaseConnection]:
     result = await db.execute(select(DatabaseConnection).where(DatabaseConnection.id == conn_id))
@@ -65,6 +86,7 @@ async def update_connection(db: AsyncSession, conn_id: int, data: dict) -> Optio
     conn.password = MASKED
     return conn
 
+
 async def delete_connection(db: AsyncSession, conn_id: int) -> bool:
     from app.models.job import Job
     jobs_result = await db.execute(
@@ -82,6 +104,7 @@ async def delete_connection(db: AsyncSession, conn_id: int) -> bool:
     await db.commit()
     return True
 
+
 async def test_connection(db: AsyncSession, conn_id: int) -> dict:
     result = await db.execute(select(DatabaseConnection).where(DatabaseConnection.id == conn_id))
     conn = result.scalar_one_or_none()
@@ -89,12 +112,15 @@ async def test_connection(db: AsyncSession, conn_id: int) -> dict:
         raise ValueError("Connection not found")
 
     plaintext_pw = decrypt(conn.password) if conn.password else ""
-    url = get_jdbc_url(conn, plaintext_pw)
     tested_at = datetime.now(timezone.utc).isoformat()
 
     try:
-        import sqlalchemy as sa
-        engine = sa.create_engine(url, connect_args={"connect_timeout": 10} if conn.db_type == "postgresql" else {})
+        port = conn.port or DEFAULT_PORTS.get(conn.db_type, 5432)
+        url = URL.create(_DRIVERS[conn.db_type], username=conn.username,
+                         password=plaintext_pw, host=conn.host,
+                         port=port, database=conn.database)
+        connect_args = {"connect_timeout": 10} if conn.db_type == "postgresql" else {}
+        engine = sa.create_engine(url, connect_args=connect_args)
         with engine.connect() as c:
             c.execute(sa.text("SELECT 1"))
         engine.dispose()

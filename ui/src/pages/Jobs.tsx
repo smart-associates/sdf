@@ -67,6 +67,7 @@ export default function Jobs() {
       qc.invalidateQueries({ queryKey: ['jobs'] })
     },
     onError: (e: any) => alert(e.response?.data?.detail || 'Execute failed'),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   })
 
   const openCreate = () => { setForm(empty()); setError(''); setValidation(null); setModal('create') }
@@ -113,7 +114,7 @@ export default function Jobs() {
                 <td className="px-4 py-3 text-xs text-gray-500 capitalize">{j.migration_mode.replace('_', ' ')}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2 justify-end">
-                    <button onClick={() => executeMut.mutate(j.id)} disabled={executeMut.isPending} className="p-1 text-gray-400 hover:text-green-600" title="Execute">
+                    <button onClick={() => executeMut.mutate(j.id)} disabled={executeMut.isPending && executeMut.variables === j.id} className="p-1 text-gray-400 hover:text-green-600" title="Execute">
                       <Play size={15} />
                     </button>
                     <button onClick={() => openEdit(j)} className="p-1 text-gray-400 hover:text-blue-600">
@@ -202,7 +203,7 @@ export default function Jobs() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Migration Mode</label>
-                <select className="w-full border rounded-lg px-3 py-2 text-sm" value={form.migration_mode || 'full'} onChange={e => setForm(f => ({ ...f, migration_mode: e.target.value as any }))}>
+                <select className="w-full border rounded-lg px-3 py-2 text-sm" value={form.migration_mode || 'append'} onChange={e => setForm(f => ({ ...f, migration_mode: e.target.value as any }))}>
                   {MIGRATION_MODES.map(m => <option key={m} value={m}>{m.replace('_', ' ')}</option>)}
                 </select>
               </div>
@@ -219,40 +220,44 @@ export default function Jobs() {
         </Modal>
       )}
 
-      {modal === 'execution' && execStatus && (
-        <Modal title={`Execution #${execStatus.id}`} onClose={() => setModal(null)} size="lg">
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <StatusBadge status={execStatus.status} />
-              <span className="text-sm text-gray-500">{execStatus.record_count.toLocaleString()} records</span>
-              {execStatus.completed_at && (
-                <span className="text-sm text-gray-500">
-                  {Math.round((new Date(execStatus.completed_at).getTime() - new Date(execStatus.started_at).getTime()) / 1000)}s
-                </span>
+      {modal === 'execution' && (
+        <Modal title={execStatus ? `Execution #${execStatus.id}` : 'Starting execution…'} onClose={() => setModal(null)} size="lg">
+          {!execStatus ? (
+            <div className="py-10 text-center text-gray-400 text-sm">Loading…</div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <StatusBadge status={execStatus.status} />
+                <span className="text-sm text-gray-500">{execStatus.record_count.toLocaleString()} records</span>
+                {execStatus.completed_at && (
+                  <span className="text-sm text-gray-500">
+                    {Math.round((new Date(execStatus.completed_at).getTime() - new Date(execStatus.started_at).getTime()) / 1000)}s
+                  </span>
+                )}
+              </div>
+              {execStatus.error_message && (
+                <div className="p-2 bg-red-50 text-red-600 text-sm rounded">{execStatus.error_message}</div>
               )}
-            </div>
-            {execStatus.error_message && (
-              <div className="p-2 bg-red-50 text-red-600 text-sm rounded">{execStatus.error_message}</div>
-            )}
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Table</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Records</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {execStatus.tables.map(t => (
-                  <tr key={t.id}>
-                    <td className="px-3 py-2 font-mono text-xs">{t.table_name}</td>
-                    <td className="px-3 py-2"><StatusBadge status={t.status} /></td>
-                    <td className="px-3 py-2 text-right">{t.record_count.toLocaleString()}</td>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Table</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Records</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y">
+                  {execStatus.tables.map(t => (
+                    <tr key={t.id}>
+                      <td className="px-3 py-2 font-mono text-xs">{t.table_name}</td>
+                      <td className="px-3 py-2"><StatusBadge status={t.status} /></td>
+                      <td className="px-3 py-2 text-right">{t.record_count.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Modal>
       )}
     </div>
