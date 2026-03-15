@@ -14,6 +14,7 @@ from app.services.encryption import decrypt
 from app.services.migration_engine import (
     build_engine, create_target_table, migrate_table, table_exists,
     csv_table_exists, migrate_csv_to_db, migrate_db_to_csv, migrate_csv_to_csv,
+    parquet_table_exists, migrate_parquet_to_db, migrate_db_to_parquet, migrate_parquet_to_parquet,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,16 +89,17 @@ def _run_job_thread(job_id: int, execution_id: int):
 
         batch_size = int(_get_setting_sync("batch_size", "1000"))
 
-        src_is_csv = src["db_type"] == "csv"
-        tgt_is_csv = tgt["db_type"] == "csv"
-        src_dir = src["database"] if src_is_csv else None
-        tgt_dir = tgt["database"] if tgt_is_csv else None
+        _FILE_TYPES = ("csv", "parquet")
+        src_is_file = src["db_type"] in _FILE_TYPES
+        tgt_is_file = tgt["db_type"] in _FILE_TYPES
+        src_dir = src["database"] if src_is_file else None
+        tgt_dir = tgt["database"] if tgt_is_file else None
 
-        src_engine = None if src_is_csv else build_engine(
+        src_engine = None if src_is_file else build_engine(
             src["db_type"], src["host"], src["port"], src["database"],
             src["username"], decrypt(src["password"] or "")
         )
-        tgt_engine = None if tgt_is_csv else build_engine(
+        tgt_engine = None if tgt_is_file else build_engine(
             tgt["db_type"], tgt["host"], tgt["port"], tgt["database"],
             tgt["username"], decrypt(tgt["password"] or "")
         )
@@ -125,16 +127,25 @@ def _run_job_thread(job_id: int, execution_id: int):
 
             try:
                 # Auto-create target table only applies to DB targets
-                if create_tgt and not tgt_is_csv:
+                if create_tgt and not tgt_is_file:
                     if not table_exists(tgt_engine, tgt_table, tgt_schema):
                         create_target_table(src_engine, tgt_engine, src_table, tgt_table, src_schema, tgt_schema)
 
-                if src_is_csv and tgt_is_csv:
+                src_type = src["db_type"]
+                tgt_type = tgt["db_type"]
+
+                if src_type == "csv" and tgt_type == "csv":
                     count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode)
-                elif src_is_csv:
+                elif src_type == "csv":
                     count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size)
-                elif tgt_is_csv:
+                elif tgt_type == "csv":
                     count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode)
+                elif src_type == "parquet" and tgt_type == "parquet":
+                    count = migrate_parquet_to_parquet(src_dir, tgt_dir, src_table, tgt_table, migration_mode)
+                elif src_type == "parquet":
+                    count = migrate_parquet_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size)
+                elif tgt_type == "parquet":
+                    count = migrate_db_to_parquet(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode)
                 else:
                     count = migrate_table(
                         src_engine, tgt_engine,
@@ -161,9 +172,9 @@ def _run_job_thread(job_id: int, execution_id: int):
                 any_failed = True
                 # Continue processing remaining tables instead of aborting
 
-        if src_engine:
+        if not src_is_file and src_engine:
             src_engine.dispose()
-        if tgt_engine:
+        if not tgt_is_file and tgt_engine:
             tgt_engine.dispose()
 
         final_status = "failed" if any_failed else "success"

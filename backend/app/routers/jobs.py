@@ -9,7 +9,7 @@ from app.models.connection import DatabaseConnection
 from app.schemas.job import JobCreate, JobUpdate, JobResponse, JobValidationResponse, JobValidationItem, JobExecuteResponse
 from app.services.job_runner import start_job_execution
 from app.services.encryption import decrypt
-from app.services.migration_engine import build_engine, table_exists, csv_table_exists
+from app.services.migration_engine import build_engine, table_exists, csv_table_exists, parquet_table_exists
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -101,14 +101,16 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
         warnings.append("No source tables defined")
 
     try:
-        if src.db_type == "csv":
+        if src.db_type in ("csv", "parquet"):
+            ext = src.db_type  # "csv" or "parquet"
+            check_fn = csv_table_exists if ext == "csv" else parquet_table_exists
             for entry in tables:
                 table = entry.split(".", 1)[1] if "." in entry else entry
-                exists = csv_table_exists(src.database or "", table)
+                exists = check_fn(src.database or "", table)
                 items.append(JobValidationItem(
                     table_name=entry,
                     exists=exists,
-                    message="CSV file found" if exists else f"CSV file not found: {table}.csv"
+                    message=f"{ext.upper()} file found" if exists else f"{ext.upper()} file not found: {table}.{ext}"
                 ))
                 if not exists:
                     valid = False
@@ -141,10 +143,10 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
         valid = False
     elif not job.create_target_table:
         try:
-            if tgt.db_type == "csv":
+            if tgt.db_type in ("csv", "parquet"):
                 tgt_dir = tgt.database or ""
                 if not os.path.isdir(tgt_dir):
-                    warnings.append(f"Target CSV directory '{tgt_dir}' does not exist (it will be created on execution)")
+                    warnings.append(f"Target {tgt.db_type.upper()} directory '{tgt_dir}' does not exist (it will be created on execution)")
             else:
                 tgt_pw = decrypt(tgt.password or "")
                 tgt_engine = build_engine(tgt.db_type, tgt.host, tgt.port, tgt.database, tgt.username, tgt_pw)

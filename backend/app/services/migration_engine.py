@@ -167,6 +167,181 @@ def _insert_batch(engine: Engine, tgt_schema: Optional[str], tgt_table: str,
 
 
 # ---------------------------------------------------------------------------
+# Parquet helpers
+# ---------------------------------------------------------------------------
+
+def _parquet_path(directory: str, table: str) -> str:
+    return os.path.join(directory, f"{table}.parquet")
+
+
+def parquet_table_exists(directory: str, table: str) -> bool:
+    return os.path.isfile(_parquet_path(directory, table))
+
+
+def migrate_parquet_to_db(
+    src_dir: str,
+    tgt_engine: Engine,
+    src_table: str,
+    tgt_table: str,
+    tgt_schema: Optional[str],
+    migration_mode: str,
+    batch_size: int,
+    progress_cb: Optional[Callable[[int], None]] = None,
+) -> int:
+    """Read a Parquet file and insert rows into a target DB table."""
+    import pyarrow.parquet as pq
+
+    path = _parquet_path(src_dir, src_table)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Parquet file not found: {path}")
+
+    tgt_full = _full_table(tgt_schema, tgt_table)
+    if migration_mode == "truncate_load":
+        with tgt_engine.begin() as conn:
+            conn.execute(text(f"TRUNCATE TABLE {tgt_full}"))
+
+    pf = pq.ParquetFile(path)
+    cols = pf.schema_arrow.names
+    total = 0
+    for batch in pf.iter_batches(batch_size=batch_size):
+        rows = batch.to_pydict()
+        # Convert column-oriented dict to list of row dicts
+        n = len(next(iter(rows.values())))
+        row_list = [{c: rows[c][i] for c in cols} for i in range(n)]
+        _insert_batch(tgt_engine, tgt_schema, tgt_table, cols, row_list)
+        total += len(row_list)
+        if progress_cb:
+            progress_cb(total)
+    return total
+
+
+def migrate_db_to_parquet(
+    src_engine: Engine,
+    tgt_dir: str,
+    src_table: str,
+    tgt_table: str,
+    src_schema: Optional[str],
+    table_filter: Optional[str],
+    migration_mode: str,
+    progress_cb: Optional[Callable[[int], None]] = None,
+) -> int:
+    """Stream rows from a source DB table and write to a Parquet file."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    src_full = _full_table(src_schema, src_table)
+    query = f"SELECT * FROM {src_full}"
+    if table_filter:
+        query += f" WHERE {_validate_filter(table_filter)}"
+
+    os.makedirs(tgt_dir, exist_ok=True)
+    path = _parquet_path(tgt_dir, tgt_table)
+
+    total = 0
+    writer = None
+    try:
+        with src_engine.connect() as src_conn:
+            result = src_conn.execution_options(stream_results=True).execute(text(query))
+            cols = list(result.keys())
+            batch: list[dict] = []
+            for row in result:
+                batch.append(dict(zip(cols, row)))
+                if len(batch) >= 10000:
+                    table_chunk = pa.Table.from_pylist(batch, schema=_infer_pa_schema(batch, cols))
+                    if writer is None:
+                        writer = pq.ParquetWriter(path, table_chunk.schema)
+                    writer.write_table(table_chunk)
+                    total += len(batch)
+                    if progress_cb:
+                        progress_cb(total)
+                    batch = []
+            if batch:
+                table_chunk = pa.Table.from_pylist(batch)
+                if writer is None:
+                    writer = pq.ParquetWriter(path, table_chunk.schema)
+                writer.write_table(table_chunk)
+                total += len(batch)
+                if progress_cb:
+                    progress_cb(total)
+    finally:
+        if writer:
+            writer.close()
+    return total
+
+
+def migrate_parquet_to_parquet(
+    src_dir: str,
+    tgt_dir: str,
+    src_table: str,
+    tgt_table: str,
+    migration_mode: str,
+    progress_cb: Optional[Callable[[int], None]] = None,
+) -> int:
+    """Copy a Parquet file to another directory, optionally appending."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    src_path = _parquet_path(src_dir, src_table)
+    if not os.path.isfile(src_path):
+        raise FileNotFoundError(f"Parquet file not found: {src_path}")
+
+    os.makedirs(tgt_dir, exist_ok=True)
+    tgt_path = _parquet_path(tgt_dir, tgt_table)
+
+    src_file = pq.ParquetFile(src_path)
+    writer = None
+    total = 0
+    try:
+        # When appending, carry over existing rows first
+        if migration_mode == "append" and os.path.isfile(tgt_path):
+            existing = pq.read_table(tgt_path)
+            writer = pq.ParquetWriter(tgt_path + ".tmp", existing.schema)
+            writer.write_table(existing)
+            total += existing.num_rows
+
+        for batch in src_file.iter_batches(batch_size=10000):
+            tbl = pa.Table.from_batches([batch])
+            if writer is None:
+                out_path = tgt_path + ".tmp" if os.path.isfile(tgt_path) else tgt_path
+                writer = pq.ParquetWriter(out_path, tbl.schema)
+            writer.write_table(tbl)
+            total += batch.num_rows
+
+        if writer:
+            writer.close()
+            writer = None
+            tmp = tgt_path + ".tmp"
+            if os.path.isfile(tmp):
+                os.replace(tmp, tgt_path)
+    finally:
+        if writer:
+            writer.close()
+    if progress_cb:
+        progress_cb(total)
+    return total
+
+
+def _infer_pa_schema(rows: list[dict], cols: list[str]):
+    """Infer a pyarrow schema from the first row, falling back to string for unknowns."""
+    import pyarrow as pa
+    if not rows:
+        return pa.schema([pa.field(c, pa.string()) for c in cols])
+    sample = rows[0]
+    fields = []
+    for c in cols:
+        v = sample.get(c)
+        if isinstance(v, bool):
+            fields.append(pa.field(c, pa.bool_()))
+        elif isinstance(v, int):
+            fields.append(pa.field(c, pa.int64()))
+        elif isinstance(v, float):
+            fields.append(pa.field(c, pa.float64()))
+        else:
+            fields.append(pa.field(c, pa.string()))
+    return pa.schema(fields)
+
+
+# ---------------------------------------------------------------------------
 # CSV helpers
 # ---------------------------------------------------------------------------
 

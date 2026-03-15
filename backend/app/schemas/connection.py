@@ -4,7 +4,7 @@ from datetime import datetime
 
 class DatabaseConnectionBase(BaseModel):
     name: str
-    db_type: str  # postgresql|mysql|mssql|csv
+    db_type: str  # postgresql|mysql|mssql|csv|parquet
     host: Optional[str] = None
     port: Optional[int] = None
     database: str  # for csv: directory path
