@@ -8,7 +8,7 @@ import {
 import StatusBadge from '../components/StatusBadge'
 import Modal from '../components/Modal'
 
-const DB_TYPES = ['postgresql', 'mysql', 'mssql'] as const
+const DB_TYPES = ['postgresql', 'mysql', 'mssql', 'csv'] as const
 const DEFAULT_PORTS: Record<string, number> = { postgresql: 5432, mysql: 3306, mssql: 1433 }
 
 function empty(): Partial<DatabaseConnection> {
@@ -54,7 +54,11 @@ export default function Connections() {
   const openEdit = (c: DatabaseConnection) => { setForm({ ...c, password: '********' }); setError(''); setTestResult(null); setModal('edit') }
 
   const handleDbTypeChange = (t: string) => {
-    setForm(f => ({ ...f, db_type: t as any, port: DEFAULT_PORTS[t] || 5432 }))
+    if (t === 'csv') {
+      setForm(f => ({ ...f, db_type: 'csv', host: '', port: undefined, username: '', password: '' }))
+    } else {
+      setForm(f => ({ ...f, db_type: t as any, port: DEFAULT_PORTS[t] || 5432 }))
+    }
   }
 
   const handleSubmit = () => {
@@ -93,8 +97,8 @@ export default function Connections() {
               <tr key={c.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium">{c.name}</td>
                 <td className="px-4 py-3 uppercase text-xs text-gray-500">{c.db_type}</td>
-                <td className="px-4 py-3 text-gray-600">{c.host}:{c.port}</td>
-                <td className="px-4 py-3 text-gray-600">{c.database}</td>
+                <td className="px-4 py-3 text-gray-600">{c.db_type === 'csv' ? '—' : `${c.host}:${c.port}`}</td>
+                <td className="px-4 py-3 text-gray-600 max-w-xs truncate" title={c.database}>{c.database}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col gap-1">
                     <StatusBadge status={c.last_test_status || 'untested'} />
@@ -155,26 +159,36 @@ export default function Connections() {
                   {DB_TYPES.map(t => <option key={t} value={t}>{t.toUpperCase()}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Host *</label>
-                <input className="w-full border rounded-lg px-3 py-2 text-sm" value={form.host || ''} onChange={e => setForm(f => ({ ...f, host: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Port</label>
-                <input type="number" className="w-full border rounded-lg px-3 py-2 text-sm" value={form.port || ''} onChange={e => setForm(f => ({ ...f, port: +e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Database *</label>
-                <input className="w-full border rounded-lg px-3 py-2 text-sm" value={form.database || ''} onChange={e => setForm(f => ({ ...f, database: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Username</label>
-                <input className="w-full border rounded-lg px-3 py-2 text-sm" value={form.username || ''} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
-                <input type="password" className="w-full border rounded-lg px-3 py-2 text-sm" value={form.password || ''} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
-              </div>
+              {form.db_type === 'csv' ? (
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Directory Path *</label>
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm font-mono" placeholder="/data/csv" value={form.database || ''} onChange={e => setForm(f => ({ ...f, database: e.target.value }))} />
+                  <p className="text-xs text-gray-400 mt-1">Each table maps to a CSV file: &lt;directory&gt;/&lt;table&gt;.csv</p>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Host *</label>
+                    <input className="w-full border rounded-lg px-3 py-2 text-sm" value={form.host || ''} onChange={e => setForm(f => ({ ...f, host: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Port</label>
+                    <input type="number" className="w-full border rounded-lg px-3 py-2 text-sm" value={form.port || ''} onChange={e => setForm(f => ({ ...f, port: +e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Database *</label>
+                    <input className="w-full border rounded-lg px-3 py-2 text-sm" value={form.database || ''} onChange={e => setForm(f => ({ ...f, database: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Username</label>
+                    <input className="w-full border rounded-lg px-3 py-2 text-sm" value={form.username || ''} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
+                    <input type="password" className="w-full border rounded-lg px-3 py-2 text-sm" value={form.password || ''} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                  </div>
+                </>
+              )}
             </div>
             {modal === 'edit' && form.id && (
               <button

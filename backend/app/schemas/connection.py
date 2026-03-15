@@ -4,10 +4,10 @@ from datetime import datetime
 
 class DatabaseConnectionBase(BaseModel):
     name: str
-    db_type: str  # postgresql|mysql|mssql
-    host: str
+    db_type: str  # postgresql|mysql|mssql|csv
+    host: Optional[str] = None
     port: Optional[int] = None
-    database: str
+    database: str  # for csv: directory path
     username: Optional[str] = None
 
 class DatabaseConnectionCreate(DatabaseConnectionBase):

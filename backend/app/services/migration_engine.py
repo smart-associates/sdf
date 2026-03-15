@@ -1,4 +1,6 @@
 """Core migration engine: copies tables from source to target DB."""
+import csv
+import os
 import sqlalchemy as sa
 from sqlalchemy import inspect, text, MetaData, Table, Column
 from sqlalchemy import String, Text, Integer, BigInteger, Float, Numeric, Boolean, Date, DateTime
@@ -162,3 +164,129 @@ def _insert_batch(engine: Engine, tgt_schema: Optional[str], tgt_table: str,
     mapped = [{f"p{i}": row[c] for i, c in enumerate(cols)} for row in rows]
     with engine.begin() as conn:
         conn.execute(sql, mapped)
+
+
+# ---------------------------------------------------------------------------
+# CSV helpers
+# ---------------------------------------------------------------------------
+
+def _csv_path(directory: str, table: str) -> str:
+    return os.path.join(directory, f"{table}.csv")
+
+
+def csv_table_exists(directory: str, table: str) -> bool:
+    return os.path.isfile(_csv_path(directory, table))
+
+
+def migrate_csv_to_db(
+    src_dir: str,
+    tgt_engine: Engine,
+    src_table: str,
+    tgt_table: str,
+    tgt_schema: Optional[str],
+    migration_mode: str,
+    batch_size: int,
+    progress_cb: Optional[Callable[[int], None]] = None,
+) -> int:
+    """Read a CSV file and insert rows into a target DB table."""
+    path = _csv_path(src_dir, src_table)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"CSV file not found: {path}")
+
+    tgt_full = _full_table(tgt_schema, tgt_table)
+    if migration_mode == "truncate_load":
+        with tgt_engine.begin() as conn:
+            conn.execute(text(f"TRUNCATE TABLE {tgt_full}"))
+
+    total = 0
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        cols = list(reader.fieldnames or [])
+        batch: list[dict] = []
+        for row in reader:
+            batch.append(dict(row))
+            if len(batch) >= batch_size:
+                _insert_batch(tgt_engine, tgt_schema, tgt_table, cols, batch)
+                total += len(batch)
+                if progress_cb:
+                    progress_cb(total)
+                batch = []
+        if batch:
+            _insert_batch(tgt_engine, tgt_schema, tgt_table, cols, batch)
+            total += len(batch)
+            if progress_cb:
+                progress_cb(total)
+    return total
+
+
+def migrate_db_to_csv(
+    src_engine: Engine,
+    tgt_dir: str,
+    src_table: str,
+    tgt_table: str,
+    src_schema: Optional[str],
+    table_filter: Optional[str],
+    migration_mode: str,
+    progress_cb: Optional[Callable[[int], None]] = None,
+) -> int:
+    """Stream rows from a source DB table and write to a CSV file."""
+    src_full = _full_table(src_schema, src_table)
+    query = f"SELECT * FROM {src_full}"
+    if table_filter:
+        query += f" WHERE {_validate_filter(table_filter)}"
+
+    os.makedirs(tgt_dir, exist_ok=True)
+    path = _csv_path(tgt_dir, tgt_table)
+    append_mode = migration_mode == "append" and os.path.isfile(path)
+    file_mode = "a" if append_mode else "w"
+
+    total = 0
+    with src_engine.connect() as src_conn:
+        result = src_conn.execution_options(stream_results=True).execute(text(query))
+        cols = list(result.keys())
+        with open(path, file_mode, newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=cols)
+            if not append_mode:
+                writer.writeheader()
+            for row in result:
+                writer.writerow(dict(zip(cols, row)))
+                total += 1
+                if progress_cb and total % 1000 == 0:
+                    progress_cb(total)
+    if progress_cb:
+        progress_cb(total)
+    return total
+
+
+def migrate_csv_to_csv(
+    src_dir: str,
+    tgt_dir: str,
+    src_table: str,
+    tgt_table: str,
+    migration_mode: str,
+    progress_cb: Optional[Callable[[int], None]] = None,
+) -> int:
+    """Copy a CSV file to another directory."""
+    src_path = _csv_path(src_dir, src_table)
+    if not os.path.isfile(src_path):
+        raise FileNotFoundError(f"CSV file not found: {src_path}")
+
+    os.makedirs(tgt_dir, exist_ok=True)
+    tgt_path = _csv_path(tgt_dir, tgt_table)
+    append_mode = migration_mode == "append" and os.path.isfile(tgt_path)
+    file_mode = "a" if append_mode else "w"
+
+    total = 0
+    with open(src_path, newline="", encoding="utf-8") as src_f:
+        reader = csv.DictReader(src_f)
+        cols = list(reader.fieldnames or [])
+        with open(tgt_path, file_mode, newline="", encoding="utf-8") as tgt_f:
+            writer = csv.DictWriter(tgt_f, fieldnames=cols)
+            if not append_mode:
+                writer.writeheader()
+            for row in reader:
+                writer.writerow(row)
+                total += 1
+    if progress_cb:
+        progress_cb(total)
+    return total

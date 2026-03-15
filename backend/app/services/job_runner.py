@@ -11,7 +11,10 @@ from app.models.job import Job, JobExecution, JobExecutionTable
 from app.models.connection import DatabaseConnection
 from app.models.setting import Setting
 from app.services.encryption import decrypt
-from app.services.migration_engine import build_engine, create_target_table, migrate_table, table_exists
+from app.services.migration_engine import (
+    build_engine, create_target_table, migrate_table, table_exists,
+    csv_table_exists, migrate_csv_to_db, migrate_db_to_csv, migrate_csv_to_csv,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +88,16 @@ def _run_job_thread(job_id: int, execution_id: int):
 
         batch_size = int(_get_setting_sync("batch_size", "1000"))
 
-        src_engine = build_engine(
+        src_is_csv = src["db_type"] == "csv"
+        tgt_is_csv = tgt["db_type"] == "csv"
+        src_dir = src["database"] if src_is_csv else None
+        tgt_dir = tgt["database"] if tgt_is_csv else None
+
+        src_engine = None if src_is_csv else build_engine(
             src["db_type"], src["host"], src["port"], src["database"],
             src["username"], decrypt(src["password"] or "")
         )
-        tgt_engine = build_engine(
+        tgt_engine = None if tgt_is_csv else build_engine(
             tgt["db_type"], tgt["host"], tgt["port"], tgt["database"],
             tgt["username"], decrypt(tgt["password"] or "")
         )
@@ -116,15 +124,25 @@ def _run_job_thread(job_id: int, execution_id: int):
             exec_table_id = _create_exec_table_sync(execution_id, table_entry)
 
             try:
-                if create_tgt and not table_exists(tgt_engine, tgt_table, tgt_schema):
-                    create_target_table(src_engine, tgt_engine, src_table, tgt_table, src_schema, tgt_schema)
+                # Auto-create target table only applies to DB targets
+                if create_tgt and not tgt_is_csv:
+                    if not table_exists(tgt_engine, tgt_table, tgt_schema):
+                        create_target_table(src_engine, tgt_engine, src_table, tgt_table, src_schema, tgt_schema)
 
-                count = migrate_table(
-                    src_engine, tgt_engine,
-                    src_table, tgt_table,
-                    src_schema, tgt_schema,
-                    table_filter, migration_mode, batch_size
-                )
+                if src_is_csv and tgt_is_csv:
+                    count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode)
+                elif src_is_csv:
+                    count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size)
+                elif tgt_is_csv:
+                    count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode)
+                else:
+                    count = migrate_table(
+                        src_engine, tgt_engine,
+                        src_table, tgt_table,
+                        src_schema, tgt_schema,
+                        table_filter, migration_mode, batch_size
+                    )
+
                 total_records += count
                 _update_exec_table_sync(
                     exec_table_id,
@@ -143,8 +161,10 @@ def _run_job_thread(job_id: int, execution_id: int):
                 any_failed = True
                 # Continue processing remaining tables instead of aborting
 
-        src_engine.dispose()
-        tgt_engine.dispose()
+        if src_engine:
+            src_engine.dispose()
+        if tgt_engine:
+            tgt_engine.dispose()
 
         final_status = "failed" if any_failed else "success"
         final_error = "One or more tables failed — see table details" if any_failed else None

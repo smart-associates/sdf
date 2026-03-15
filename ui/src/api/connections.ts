@@ -3,10 +3,10 @@ import client from './client'
 export interface DatabaseConnection {
   id: number
   name: string
-  db_type: 'postgresql' | 'mysql' | 'mssql'
-  host: string
+  db_type: 'postgresql' | 'mysql' | 'mssql' | 'csv'
+  host?: string
   port?: number
-  database: string
+  database: string  // for csv: directory path
   username?: string
   password?: string
   last_test_status?: string

@@ -8,7 +8,7 @@ class DatabaseConnection(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False)
     db_type = Column(String(50), nullable=False)  # postgresql|mysql|mssql
-    host = Column(String(255), nullable=False)
+    host = Column(String(255), nullable=True)
     port = Column(Integer)
     database = Column(String(255), nullable=False)
     username = Column(String(255))

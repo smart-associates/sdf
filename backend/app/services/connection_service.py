@@ -1,3 +1,4 @@
+import os
 import sqlalchemy as sa
 from sqlalchemy.engine import URL
 from typing import Optional
@@ -111,9 +112,28 @@ async def test_connection(db: AsyncSession, conn_id: int) -> dict:
     if not conn:
         raise ValueError("Connection not found")
 
-    plaintext_pw = decrypt(conn.password) if conn.password else ""
     tested_at = datetime.now(timezone.utc).isoformat()
 
+    if conn.db_type == "csv":
+        directory = conn.database or ""
+        try:
+            os.makedirs(directory, exist_ok=True)
+            if not os.access(directory, os.R_OK | os.W_OK):
+                raise PermissionError(f"No read/write access to {directory}")
+            conn.last_test_status = "success"
+            conn.last_tested_at = tested_at
+            conn.last_test_error = None
+            await db.commit()
+            return {"success": True, "message": "Directory accessible", "tested_at": tested_at}
+        except Exception as e:
+            error_msg = str(e)[:500]
+            conn.last_test_status = "failed"
+            conn.last_tested_at = tested_at
+            conn.last_test_error = error_msg
+            await db.commit()
+            return {"success": False, "message": "Directory not accessible", "tested_at": tested_at, "error": error_msg}
+
+    plaintext_pw = decrypt(conn.password) if conn.password else ""
     try:
         port = conn.port or DEFAULT_PORTS.get(conn.db_type, 5432)
         url = URL.create(_DRIVERS[conn.db_type], username=conn.username,
