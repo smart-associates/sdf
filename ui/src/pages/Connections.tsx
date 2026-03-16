@@ -96,7 +96,7 @@ export default function Connections() {
             {connections.map(c => (
               <tr key={c.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium">{c.name}</td>
-                <td className="px-4 py-3 uppercase text-xs text-gray-500">{c.db_type}</td>
+                <td className="px-4 py-3 uppercase text-xs text-gray-500">{c.db_type === 'mssql' ? 'MS SQL' : c.db_type}</td>
                 <td className="px-4 py-3 text-gray-600">{(c.db_type === 'csv' || c.db_type === 'parquet') ? '—' : `${c.host}:${c.port}`}</td>
                 <td className="px-4 py-3 text-gray-600 max-w-xs truncate" title={c.database}>{c.database}</td>
                 <td className="px-4 py-3">
@@ -156,7 +156,7 @@ export default function Connections() {
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Type *</label>
                 <select className="w-full border rounded-lg px-3 py-2 text-sm" value={form.db_type || 'postgresql'} onChange={e => handleDbTypeChange(e.target.value)}>
-                  {DB_TYPES.map(t => <option key={t} value={t}>{t.toUpperCase()}</option>)}
+                  {DB_TYPES.map(t => <option key={t} value={t}>{t === 'mssql' ? 'MS SQL' : t.toUpperCase()}</option>)}
                 </select>
               </div>
               {(form.db_type === 'csv' || form.db_type === 'parquet') ? (
