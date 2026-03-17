@@ -21,15 +21,17 @@ _DEFAULT_PORTS = {"postgresql": 5432, "mysql": 3306, "mssql": 1433}
 _FILTER_FORBIDDEN = [";", "--", "/*", "*/", "xp_", "exec ", "execute "]
 
 
-def _quote_ident(name: str) -> str:
-    """Double-quote an SQL identifier, escaping embedded double quotes."""
+def _quote_ident(name: str, dialect: str = "postgresql") -> str:
+    """Quote an SQL identifier using the appropriate quoting style for the dialect."""
+    if dialect == "mysql":
+        return "`" + name.replace("`", "``") + "`"
     return '"' + name.replace('"', '""') + '"'
 
 
-def _full_table(schema: Optional[str], table: str) -> str:
+def _full_table(schema: Optional[str], table: str, dialect: str = "postgresql") -> str:
     if schema:
-        return f"{_quote_ident(schema)}.{_quote_ident(table)}"
-    return _quote_ident(table)
+        return f"{_quote_ident(schema, dialect)}.{_quote_ident(table, dialect)}"
+    return _quote_ident(table, dialect)
 
 
 def _validate_filter(table_filter: str) -> str:
@@ -156,8 +158,9 @@ def migrate_table(
 
 def _insert_batch(engine: Engine, tgt_schema: Optional[str], tgt_table: str,
                   cols: list[str], rows: list[dict]):
-    tgt_full = _full_table(tgt_schema, tgt_table)
-    col_idents = ", ".join(_quote_ident(c) for c in cols)
+    dialect = engine.dialect.name
+    tgt_full = _full_table(tgt_schema, tgt_table, dialect)
+    col_idents = ", ".join(_quote_ident(c, dialect) for c in cols)
     # Use indexed placeholders to avoid issues with special chars in column names
     placeholders = ", ".join(f":p{i}" for i in range(len(cols)))
     sql = text(f"INSERT INTO {tgt_full} ({col_idents}) VALUES ({placeholders})")
