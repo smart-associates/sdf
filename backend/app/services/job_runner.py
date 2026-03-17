@@ -134,24 +134,29 @@ def _run_job_thread(job_id: int, execution_id: int):
                 src_type = src["db_type"]
                 tgt_type = tgt["db_type"]
 
+                def progress_cb(n: int):
+                    _update_exec_table_sync(exec_table_id, record_count=n)
+                    _update_execution_sync(execution_id, record_count=total_records + n)
+
                 if src_type == "csv" and tgt_type == "csv":
-                    count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode)
+                    count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
                 elif src_type == "csv":
-                    count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size)
+                    count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
                 elif tgt_type == "csv":
-                    count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode)
+                    count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb)
                 elif src_type == "parquet" and tgt_type == "parquet":
-                    count = migrate_parquet_to_parquet(src_dir, tgt_dir, src_table, tgt_table, migration_mode)
+                    count = migrate_parquet_to_parquet(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
                 elif src_type == "parquet":
-                    count = migrate_parquet_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size)
+                    count = migrate_parquet_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
                 elif tgt_type == "parquet":
-                    count = migrate_db_to_parquet(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode)
+                    count = migrate_db_to_parquet(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb)
                 else:
                     count = migrate_table(
                         src_engine, tgt_engine,
                         src_table, tgt_table,
                         src_schema, tgt_schema,
-                        table_filter, migration_mode, batch_size
+                        table_filter, migration_mode, batch_size,
+                        progress_cb
                     )
 
                 total_records += count
