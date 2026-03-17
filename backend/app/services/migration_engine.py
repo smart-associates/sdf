@@ -121,8 +121,9 @@ def migrate_table(
     progress_cb: Optional[Callable[[int], None]] = None,
 ) -> int:
     """Migrate one table. Returns total record count."""
-    src_full = _full_table(src_schema, src_table)
-    tgt_full = _full_table(tgt_schema, tgt_table)
+    src_dialect = src_engine.dialect.name
+    src_full = _full_table(src_schema, src_table, src_dialect)
+    tgt_full = _full_table(tgt_schema, tgt_table, tgt_engine.dialect.name)
 
     query = f"SELECT * FROM {src_full}"
     if table_filter:
@@ -130,7 +131,7 @@ def migrate_table(
 
     if migration_mode == "truncate_load":
         with tgt_engine.begin() as tgt_conn:
-            tgt_conn.execute(text(f"TRUNCATE TABLE {tgt_full}"))
+            tgt_conn.execute(text(f"TRUNCATE TABLE {_full_table(tgt_schema, tgt_table, tgt_engine.dialect.name)}"))
 
     total = 0
     with src_engine.connect() as src_conn:
@@ -198,7 +199,8 @@ def migrate_parquet_to_db(
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Parquet file not found: {path}")
 
-    tgt_full = _full_table(tgt_schema, tgt_table)
+    dialect = tgt_engine.dialect.name
+    tgt_full = _full_table(tgt_schema, tgt_table, dialect)
     if migration_mode == "truncate_load":
         with tgt_engine.begin() as conn:
             conn.execute(text(f"TRUNCATE TABLE {tgt_full}"))
@@ -232,7 +234,7 @@ def migrate_db_to_parquet(
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    src_full = _full_table(src_schema, src_table)
+    src_full = _full_table(src_schema, src_table, src_engine.dialect.name)
     query = f"SELECT * FROM {src_full}"
     if table_filter:
         query += f" WHERE {_validate_filter(table_filter)}"
@@ -371,7 +373,8 @@ def migrate_csv_to_db(
     if not os.path.isfile(path):
         raise FileNotFoundError(f"CSV file not found: {path}")
 
-    tgt_full = _full_table(tgt_schema, tgt_table)
+    dialect = tgt_engine.dialect.name
+    tgt_full = _full_table(tgt_schema, tgt_table, dialect)
     if migration_mode == "truncate_load":
         with tgt_engine.begin() as conn:
             conn.execute(text(f"TRUNCATE TABLE {tgt_full}"))
@@ -408,7 +411,7 @@ def migrate_db_to_csv(
     progress_cb: Optional[Callable[[int], None]] = None,
 ) -> int:
     """Stream rows from a source DB table and write to a CSV file."""
-    src_full = _full_table(src_schema, src_table)
+    src_full = _full_table(src_schema, src_table, src_engine.dialect.name)
     query = f"SELECT * FROM {src_full}"
     if table_filter:
         query += f" WHERE {_validate_filter(table_filter)}"
