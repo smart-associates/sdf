@@ -20,8 +20,27 @@ from app.services.migration_engine import (
 
 logger = logging.getLogger(__name__)
 
+
+class _StopRequested(Exception):
+    """Raised inside progress_cb to abort a migration mid-batch."""
+
+
 # Module-level sync engine shared across all background threads
 _sync_engine = create_engine(settings.sync_database_url)
+
+# Registry of stop events keyed by execution_id
+_stop_events: dict = {}
+_stop_events_lock = threading.Lock()
+
+
+def stop_execution(execution_id: int) -> bool:
+    """Signal a running execution to stop. Returns True if the signal was sent."""
+    with _stop_events_lock:
+        event = _stop_events.get(execution_id)
+    if event:
+        event.set()
+        return True
+    return False
 
 
 def _now_iso() -> str:
@@ -80,7 +99,7 @@ def _load_job_sync(job_id: int) -> dict:
     }
 
 
-def _run_job_thread(job_id: int, execution_id: int):
+def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event):
     """Runs in a background thread (not async) since DB drivers are blocking."""
     try:
         data = _load_job_sync(job_id)
@@ -114,8 +133,12 @@ def _run_job_thread(job_id: int, execution_id: int):
 
         total_records = 0
         any_failed = False
+        stopped = False
 
         for table_entry in tables:
+            if stop_event.is_set():
+                stopped = True
+                break
             # Parse schema.table or just table
             if "." in table_entry:
                 src_schema, src_table = table_entry.split(".", 1)
@@ -148,6 +171,8 @@ def _run_job_thread(job_id: int, execution_id: int):
                 tgt_type = tgt["db_type"]
 
                 def progress_cb(n: int):
+                    if stop_event.is_set():
+                        raise _StopRequested()
                     _update_exec_table_sync(exec_table_id, record_count=n)
                     _update_execution_sync(execution_id, record_count=total_records + n)
 
@@ -179,6 +204,14 @@ def _run_job_thread(job_id: int, execution_id: int):
                     completed_at=_now_iso(),
                     record_count=count
                 )
+            except _StopRequested:
+                _update_exec_table_sync(
+                    exec_table_id,
+                    status="cancelled",
+                    completed_at=_now_iso(),
+                )
+                stopped = True
+                break
             except Exception as e:
                 logger.error(f"Table {table_entry} failed: {e}")
                 _update_exec_table_sync(
@@ -195,8 +228,15 @@ def _run_job_thread(job_id: int, execution_id: int):
         if not tgt_is_file and tgt_engine:
             tgt_engine.dispose()
 
-        final_status = "failed" if any_failed else "success"
-        final_error = "One or more tables failed — see table details" if any_failed else None
+        if stopped:
+            final_status = "cancelled"
+            final_error = "Execution stopped by user"
+        elif any_failed:
+            final_status = "failed"
+            final_error = "One or more tables failed — see table details"
+        else:
+            final_status = "success"
+            final_error = None
         _update_execution_sync(
             execution_id,
             status=final_status,
@@ -212,6 +252,9 @@ def _run_job_thread(job_id: int, execution_id: int):
             completed_at=_now_iso(),
             error_message=str(e)[:1000]
         )
+    finally:
+        with _stop_events_lock:
+            _stop_events.pop(execution_id, None)
 
 
 async def start_job_execution(db: AsyncSession, job_id: int) -> JobExecution:
@@ -226,9 +269,13 @@ async def start_job_execution(db: AsyncSession, job_id: int) -> JobExecution:
     await db.commit()
     await db.refresh(execution)
 
+    stop_event = threading.Event()
+    with _stop_events_lock:
+        _stop_events[execution.id] = stop_event
+
     thread = threading.Thread(
         target=_run_job_thread,
-        args=(job_id, execution.id),
+        args=(job_id, execution.id, stop_event),
         daemon=True
     )
     thread.start()

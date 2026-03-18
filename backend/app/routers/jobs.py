@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models.job import Job, JobExecution, JobExecutionTable
 from app.models.connection import DatabaseConnection
 from app.schemas.job import JobCreate, JobUpdate, JobResponse, JobValidationResponse, JobValidationItem, JobExecuteResponse
-from app.services.job_runner import start_job_execution
+from app.services.job_runner import start_job_execution, stop_execution
 from app.services.encryption import decrypt
 from app.services.migration_engine import build_engine, table_exists, csv_table_exists, parquet_table_exists
 
@@ -21,8 +21,18 @@ def _validate_connections(data):
 
 @router.get("", response_model=list[JobResponse])
 async def list_jobs(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Job).order_by(Job.id))
-    return result.scalars().all()
+    jobs = (await db.execute(select(Job).order_by(Job.id))).scalars().all()
+    running = (await db.execute(
+        select(JobExecution.job_id, JobExecution.id)
+        .where(JobExecution.status == "running")
+    )).all()
+    running_map = {row[0]: row[1] for row in running}
+    out = []
+    for j in jobs:
+        r = JobResponse.model_validate(j)
+        r.running_execution_id = running_map.get(j.id)
+        out.append(r)
+    return out
 
 
 @router.get("/{job_id}", response_model=JobResponse)
@@ -189,3 +199,21 @@ async def execute_job(job_id: int, db: AsyncSession = Depends(get_db)):
         status=execution.status,
         started_at=execution.started_at
     )
+
+
+@router.post("/{job_id}/executions/{execution_id}/stop", status_code=200)
+async def stop_job_execution(job_id: int, execution_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(JobExecution).where(
+            JobExecution.id == execution_id,
+            JobExecution.job_id == job_id,
+            JobExecution.status == "running"
+        )
+    )
+    execution = result.scalar_one_or_none()
+    if not execution:
+        raise HTTPException(404, "Running execution not found")
+    signalled = stop_execution(execution_id)
+    if not signalled:
+        raise HTTPException(409, "Execution has already finished")
+    return {"detail": "Stop signal sent"}

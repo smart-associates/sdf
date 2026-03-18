@@ -40,3 +40,6 @@ export const getExecution = (id: number) =>
 
 export const getExecutions = (jobId?: number, limit = 50) =>
   client.get<Execution[]>('/executions', { params: { job_id: jobId, limit } }).then(r => r.data)
+
+export const stopExecution = (jobId: number, executionId: number) =>
+  client.post(`/jobs/${jobId}/executions/${executionId}/stop`).then(r => r.data)

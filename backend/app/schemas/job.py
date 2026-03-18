@@ -22,6 +22,7 @@ class JobResponse(JobBase):
     id: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    running_execution_id: Optional[int] = None
 
     class Config:
         from_attributes = True

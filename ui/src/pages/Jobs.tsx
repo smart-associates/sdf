@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Edit2, Play, CheckCircle } from 'lucide-react'
+import { Plus, Trash2, Edit2, Play, CheckCircle, Square } from 'lucide-react'
 import { getJobs, createJob, updateJob, deleteJob, validateJob, executeJob, Job } from '../api/jobs'
 import { getConnections } from '../api/connections'
-import { getExecution } from '../api/executions'
+import { getExecution, stopExecution } from '../api/executions'
 import StatusBadge from '../components/StatusBadge'
 import Modal from '../components/Modal'
 
@@ -24,8 +24,14 @@ export default function Jobs() {
   const [validation, setValidation] = useState<any>(null)
   const [executionId, setExecutionId] = useState<number | null>(null)
 
-  const { data: jobs = [], isLoading } = useQuery({ queryKey: ['jobs'], queryFn: getJobs })
+  const { data: jobs = [], isLoading } = useQuery({
+    queryKey: ['jobs'],
+    queryFn: getJobs,
+    refetchInterval: (query) => query.state.data?.some(j => j.running_execution_id) ? 2000 : false,
+  })
   const { data: connections = [] } = useQuery({ queryKey: ['connections'], queryFn: getConnections })
+  const [execJobId, setExecJobId] = useState<number | null>(null)
+
   const { data: execStatus } = useQuery({
     queryKey: ['execution', executionId],
     queryFn: () => getExecution(executionId!),
@@ -61,13 +67,23 @@ export default function Jobs() {
 
   const executeMut = useMutation({
     mutationFn: (id: number) => executeJob(id),
-    onSuccess: (r) => {
+    onSuccess: (r, id) => {
       setExecutionId(r.execution_id)
+      setExecJobId(id)
       setModal('execution')
       qc.invalidateQueries({ queryKey: ['jobs'] })
     },
     onError: (e: any) => alert(e.response?.data?.detail || 'Execute failed'),
     onSettled: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  })
+
+  const stopMut = useMutation({
+    mutationFn: () => stopExecution(execJobId!, executionId!),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['execution', executionId] })
+      qc.invalidateQueries({ queryKey: ['jobs'] })
+    },
+    onError: (e: any) => alert(e.response?.data?.detail || 'Stop failed'),
   })
 
   const openCreate = () => { setForm(empty()); setError(''); setValidation(null); setModal('create') }
@@ -114,9 +130,20 @@ export default function Jobs() {
                 <td className="px-4 py-3 text-xs text-gray-500 capitalize">{j.migration_mode.replace('_', ' ')}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2 justify-end">
-                    <button onClick={() => executeMut.mutate(j.id)} disabled={executeMut.isPending && executeMut.variables === j.id} className="p-1 text-gray-400 hover:text-green-600" title="Execute">
-                      <Play size={15} />
-                    </button>
+                    {j.running_execution_id ? (
+                      <button
+                        onClick={() => { setExecutionId(j.running_execution_id!); setExecJobId(j.id); setModal('execution') }}
+                        className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
+                        title="View running execution"
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                        Running
+                      </button>
+                    ) : (
+                      <button onClick={() => executeMut.mutate(j.id)} disabled={executeMut.isPending && executeMut.variables === j.id} className="p-1 text-gray-400 hover:text-green-600" title="Execute">
+                        <Play size={15} />
+                      </button>
+                    )}
                     <button onClick={() => openEdit(j)} className="p-1 text-gray-400 hover:text-blue-600">
                       <Edit2 size={15} />
                     </button>
@@ -226,13 +253,24 @@ export default function Jobs() {
             <div className="py-10 text-center text-gray-400 text-sm">Loading…</div>
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <StatusBadge status={execStatus.status} />
-                <span className="text-sm text-gray-500">{execStatus.record_count.toLocaleString()} records</span>
-                {execStatus.completed_at && (
-                  <span className="text-sm text-gray-500">
-                    {Math.round((new Date(execStatus.completed_at).getTime() - new Date(execStatus.started_at).getTime()) / 1000)}s
-                  </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={execStatus.status} />
+                  <span className="text-sm text-gray-500">{execStatus.record_count.toLocaleString()} records</span>
+                  {execStatus.completed_at && (
+                    <span className="text-sm text-gray-500">
+                      {Math.round((new Date(execStatus.completed_at).getTime() - new Date(execStatus.started_at).getTime()) / 1000)}s
+                    </span>
+                  )}
+                </div>
+                {execStatus.status === 'running' && (
+                  <button
+                    onClick={() => stopMut.mutate()}
+                    disabled={stopMut.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50"
+                  >
+                    <Square size={13} /> Stop
+                  </button>
                 )}
               </div>
               {execStatus.error_message && (

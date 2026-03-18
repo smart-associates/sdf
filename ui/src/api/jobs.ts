@@ -10,6 +10,7 @@ export interface Job {
   target_schema?: string
   create_target_table: boolean
   migration_mode: 'full' | 'truncate_load' | 'append'
+  running_execution_id?: number
 }
 
 export interface JobValidationItem {
