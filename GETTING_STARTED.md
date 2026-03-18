@@ -12,31 +12,7 @@
 
 ---
 
-## Option 1: Docker Compose
-
-The fastest way to run everything.
-
-```bash
-./start.sh docker
-```
-
-This builds and starts three containers:
-- `postgres` — PostgreSQL 16 database
-- `api` — FastAPI backend on port 8000
-- `ui` — Vite dev server on port 5173
-
-Open [http://localhost:5173](http://localhost:5173).
-
-To stop: `Ctrl+C`, then `docker compose down`.
-
-To reset the database (wipes all data):
-```bash
-docker compose down -v
-```
-
----
-
-## Option 2: Local Development
+## Option 1: Local Development (recommended)
 
 ### 1. Configure environment
 
@@ -73,7 +49,10 @@ This will:
 4. Install npm packages
 5. Start Vite dev server on port 5173
 
-Or start each service manually:
+Open [http://localhost:5173](http://localhost:5173). Press `Ctrl+C` to stop both services.
+
+<details>
+<summary>Manual start (without start.sh)</summary>
 
 **Backend:**
 ```bash
@@ -89,6 +68,31 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 cd ui
 npm install
 npm run dev
+```
+</details>
+
+---
+
+## Option 2: Docker Compose
+
+If you prefer containers or don't have PostgreSQL installed locally:
+
+```bash
+./start.sh docker
+```
+
+This builds and starts three containers:
+- `postgres` — PostgreSQL 16 database
+- `api` — FastAPI backend on port 8000
+- `ui` — Vite dev server on port 5173
+
+Open [http://localhost:5173](http://localhost:5173).
+
+To stop: `Ctrl+C`, then `docker compose down`.
+
+To reset the database (wipes all data):
+```bash
+docker compose down -v
 ```
 
 ---
