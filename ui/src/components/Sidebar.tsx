@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { LayoutDashboard, Database, Briefcase, ScrollText, Settings } from 'lucide-react'
 import clsx from 'clsx'
+import logo from '../assets/logo.png'
 
 const nav = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -13,9 +14,9 @@ const nav = [
 export default function Sidebar() {
   return (
     <aside className="w-56 bg-gray-900 text-white flex flex-col">
-      <div className="p-4 border-b border-gray-700">
-        <h1 className="text-lg font-bold text-white">SDF</h1>
-        <p className="text-xs text-gray-400">Data Migration</p>
+      <div className="px-4 py-3 border-b border-gray-700 flex flex-col items-center gap-1">
+        <img src={logo} alt="Smart Associates Logo" className="w-full h-auto object-contain" />
+        <h1 className="text-xs font-bold text-white leading-tight text-center">Smart Data Frameworks</h1>
       </div>
       <nav className="flex-1 p-3 space-y-1">
         {nav.map(({ to, icon: Icon, label, end }) => (
