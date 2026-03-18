@@ -38,4 +38,5 @@ class JobExecutionTable(Base):
     started_at = Column(String(50), nullable=False)
     completed_at = Column(String(50))
     record_count = Column(Integer, default=0)
+    estimated_row_count = Column(Integer)  # stats-based estimate, may be None
     error_message = Column(Text)

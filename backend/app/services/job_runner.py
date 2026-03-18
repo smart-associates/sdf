@@ -15,6 +15,7 @@ from app.services.migration_engine import (
     build_engine, create_target_table, migrate_table, table_exists,
     csv_table_exists, migrate_csv_to_db, migrate_db_to_csv, migrate_csv_to_csv,
     parquet_table_exists, migrate_parquet_to_db, migrate_db_to_parquet, migrate_parquet_to_parquet,
+    get_estimated_row_count, get_csv_estimated_row_count, get_parquet_estimated_row_count,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,14 +44,14 @@ def _update_execution_sync(execution_id: int, **kwargs):
         )
 
 
-def _create_exec_table_sync(execution_id: int, table_name: str) -> int:
+def _create_exec_table_sync(execution_id: int, table_name: str, estimated_row_count=None) -> int:
     with _sync_engine.begin() as conn:
         result = conn.execute(
             text("""INSERT INTO job_execution_tables
-                   (execution_id, table_name, status, started_at, record_count)
-                   VALUES (:eid, :tn, 'running', :sa, 0)
+                   (execution_id, table_name, status, started_at, record_count, estimated_row_count)
+                   VALUES (:eid, :tn, 'running', :sa, 0, :erc)
                    RETURNING id"""),
-            {"eid": execution_id, "tn": table_name, "sa": _now_iso()}
+            {"eid": execution_id, "tn": table_name, "sa": _now_iso(), "erc": estimated_row_count}
         )
         row = result.fetchone()
     return row[0] if row else None
@@ -123,7 +124,19 @@ def _run_job_thread(job_id: int, execution_id: int):
                 src_table = table_entry
 
             tgt_table = src_table  # same table name on target
-            exec_table_id = _create_exec_table_sync(execution_id, table_entry)
+
+            # Gather estimated row count from source statistics (best-effort)
+            try:
+                if src_is_file and src["db_type"] == "csv":
+                    estimated = get_csv_estimated_row_count(src_dir, src_table)
+                elif src_is_file and src["db_type"] == "parquet":
+                    estimated = get_parquet_estimated_row_count(src_dir, src_table)
+                else:
+                    estimated = get_estimated_row_count(src_engine, src_table, src_schema)
+            except Exception:
+                estimated = None
+
+            exec_table_id = _create_exec_table_sync(execution_id, table_entry, estimated)
 
             try:
                 # Auto-create target table only applies to DB targets

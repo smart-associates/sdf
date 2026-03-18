@@ -8,6 +8,7 @@ export interface ExecutionTable {
   started_at: string
   completed_at?: string
   record_count: number
+  estimated_row_count?: number
   error_message?: string
 }
 

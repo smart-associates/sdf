@@ -13,8 +13,22 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await run_migrations()
     await seed_defaults()
     yield
+
+
+async def run_migrations():
+    """Apply incremental schema changes to existing databases."""
+    from app.database import engine
+    from sqlalchemy import text
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(
+                "ALTER TABLE job_execution_tables ADD COLUMN estimated_row_count INTEGER"
+            ))
+    except Exception:
+        pass  # Column already exists
 
 async def seed_defaults():
     from app.database import AsyncSessionLocal

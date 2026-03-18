@@ -85,6 +85,103 @@ def get_table_names(engine: Engine, schema: Optional[str] = None) -> list[str]:
     return insp.get_table_names(schema=schema)
 
 
+def get_estimated_row_count(
+    engine: Engine,
+    table: str,
+    schema: Optional[str] = None,
+) -> Optional[int]:
+    """Return an estimated row count from DB statistics without a full table scan.
+
+    Uses dialect-specific catalog tables:
+      - PostgreSQL: pg_class.reltuples (updated by ANALYZE/autovacuum)
+      - MySQL:      information_schema.TABLES.TABLE_ROWS
+      - MSSQL:      sys.partitions
+
+    Returns None if the estimate is unavailable or an error occurs.
+    """
+    dialect = engine.dialect.name
+    try:
+        with engine.connect() as conn:
+            if dialect == "postgresql":
+                if schema:
+                    row = conn.execute(
+                        text("""
+                            SELECT c.reltuples::bigint
+                            FROM pg_class c
+                            JOIN pg_namespace n ON n.oid = c.relnamespace
+                            WHERE c.relname = :table AND n.nspname = :schema
+                        """),
+                        {"table": table, "schema": schema},
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        text("SELECT reltuples::bigint FROM pg_class WHERE relname = :table LIMIT 1"),
+                        {"table": table},
+                    ).fetchone()
+                if row is not None and row[0] >= 0:
+                    return int(row[0])
+
+            elif dialect == "mysql":
+                if schema:
+                    row = conn.execute(
+                        text("""
+                            SELECT TABLE_ROWS FROM information_schema.TABLES
+                            WHERE TABLE_NAME = :table AND TABLE_SCHEMA = :schema
+                        """),
+                        {"table": table, "schema": schema},
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        text("""
+                            SELECT TABLE_ROWS FROM information_schema.TABLES
+                            WHERE TABLE_NAME = :table AND TABLE_SCHEMA = DATABASE()
+                        """),
+                        {"table": table},
+                    ).fetchone()
+                if row is not None and row[0] is not None:
+                    return int(row[0])
+
+            elif dialect == "mssql":
+                row = conn.execute(
+                    text("""
+                        SELECT SUM(p.rows) FROM sys.partitions p
+                        JOIN sys.objects o ON o.object_id = p.object_id
+                        WHERE o.name = :table AND p.index_id IN (0, 1)
+                    """),
+                    {"table": table},
+                ).fetchone()
+                if row is not None and row[0] is not None:
+                    return int(row[0])
+    except Exception as exc:
+        logger.debug("Could not get estimated row count for %s: %s", table, exc)
+    return None
+
+
+def get_csv_estimated_row_count(directory: str, table: str) -> Optional[int]:
+    """Count rows in a CSV file (header excluded). Returns None on error."""
+    path = _csv_path(directory, table)
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, newline="", encoding="utf-8") as f:
+            total = sum(1 for _ in f)
+        return max(0, total - 1)  # subtract header row
+    except Exception:
+        return None
+
+
+def get_parquet_estimated_row_count(directory: str, table: str) -> Optional[int]:
+    """Read row count from Parquet file metadata (no data scan). Returns None on error."""
+    path = _parquet_path(directory, table)
+    if not os.path.isfile(path):
+        return None
+    try:
+        import pyarrow.parquet as pq
+        return pq.read_metadata(path).num_rows
+    except Exception:
+        return None
+
+
 def reflect_table(engine: Engine, table_name: str, schema: Optional[str] = None) -> Table:
     meta = MetaData()
     return Table(table_name, meta, autoload_with=engine, schema=schema)

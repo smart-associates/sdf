@@ -244,16 +244,47 @@ export default function Jobs() {
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Table</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
                     <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Records</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-40">Progress</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {execStatus.tables.map(t => (
-                    <tr key={t.id}>
-                      <td className="px-3 py-2 font-mono text-xs">{t.table_name}</td>
-                      <td className="px-3 py-2"><StatusBadge status={t.status} /></td>
-                      <td className="px-3 py-2 text-right">{t.record_count.toLocaleString()}</td>
-                    </tr>
-                  ))}
+                  {execStatus.tables.map(t => {
+                    const pct = t.estimated_row_count && t.estimated_row_count > 0
+                      ? Math.min(100, Math.round(t.record_count / t.estimated_row_count * 100))
+                      : null
+                    return (
+                      <tr key={t.id}>
+                        <td className="px-3 py-2 font-mono text-xs">{t.table_name}</td>
+                        <td className="px-3 py-2"><StatusBadge status={t.status} /></td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          {t.record_count.toLocaleString()}
+                          {t.estimated_row_count != null && t.status !== 'success' && (
+                            <span className="text-gray-400"> / ~{t.estimated_row_count.toLocaleString()}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          {t.status === 'success' ? (
+                            <div className="w-full bg-green-100 rounded-full h-1.5">
+                              <div className="bg-green-500 h-1.5 rounded-full w-full" />
+                            </div>
+                          ) : t.status === 'failed' ? (
+                            <div className="w-full bg-red-100 rounded-full h-1.5">
+                              <div className="bg-red-500 h-1.5 rounded-full w-full" />
+                            </div>
+                          ) : pct != null ? (
+                            <div className="flex items-center gap-1.5">
+                              <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                                <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-xs text-gray-500 w-8 text-right">{pct}%</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

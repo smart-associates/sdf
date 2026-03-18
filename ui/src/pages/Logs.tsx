@@ -84,18 +84,39 @@ export default function Logs() {
                             <th className="text-left py-1">Table</th>
                             <th className="text-left py-1">Status</th>
                             <th className="text-right py-1">Records</th>
+                            <th className="text-left py-1 pl-4 w-32">Progress</th>
                             <th className="text-left py-1 pl-4">Error</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {e.tables.map(t => (
+                          {e.tables.map(t => {
+                            const pct = t.estimated_row_count && t.estimated_row_count > 0
+                              ? Math.min(100, Math.round(t.record_count / t.estimated_row_count * 100))
+                              : null
+                            return (
                             <tr key={t.id} className="border-t border-gray-200">
                               <td className="py-1 font-mono">{t.table_name}</td>
                               <td className="py-1"><StatusBadge status={t.status} /></td>
-                              <td className="py-1 text-right">{t.record_count.toLocaleString()}</td>
+                              <td className="py-1 text-right whitespace-nowrap">
+                                {t.record_count.toLocaleString()}
+                                {t.estimated_row_count != null && t.status !== 'success' && (
+                                  <span className="text-gray-400"> / ~{t.estimated_row_count.toLocaleString()}</span>
+                                )}
+                              </td>
+                              <td className="py-1 pl-4 w-32">
+                                {t.status === 'running' && pct != null ? (
+                                  <div className="flex items-center gap-1">
+                                    <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                                      <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                                    </div>
+                                    <span className="text-gray-500 w-7 text-right">{pct}%</span>
+                                  </div>
+                                ) : null}
+                              </td>
                               <td className="py-1 pl-4 text-red-500">{t.error_message || ''}</td>
                             </tr>
-                          ))}
+                            )
+                          })}
                         </tbody>
                       </table>
                     </td>

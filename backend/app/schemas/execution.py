@@ -9,6 +9,7 @@ class JobExecutionTableResponse(BaseModel):
     started_at: str
     completed_at: Optional[str] = None
     record_count: int = 0
+    estimated_row_count: Optional[int] = None
     error_message: Optional[str] = None
 
     class Config:
