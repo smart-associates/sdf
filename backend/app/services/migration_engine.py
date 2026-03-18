@@ -329,6 +329,7 @@ def migrate_parquet_to_parquet(
 def _infer_pa_schema(rows: list[dict], cols: list[str]):
     """Infer a pyarrow schema from the first row, falling back to string for unknowns."""
     import pyarrow as pa
+    import datetime as dt
     if not rows:
         return pa.schema([pa.field(c, pa.string()) for c in cols])
     sample = rows[0]
@@ -341,6 +342,10 @@ def _infer_pa_schema(rows: list[dict], cols: list[str]):
             fields.append(pa.field(c, pa.int64()))
         elif isinstance(v, float):
             fields.append(pa.field(c, pa.float64()))
+        elif isinstance(v, dt.datetime):
+            fields.append(pa.field(c, pa.timestamp("us")))
+        elif isinstance(v, dt.date):
+            fields.append(pa.field(c, pa.date32()))
         else:
             fields.append(pa.field(c, pa.string()))
     return pa.schema(fields)
@@ -430,7 +435,7 @@ def migrate_db_to_csv(
             if not append_mode:
                 writer.writeheader()
             for row in result:
-                writer.writerow(dict(zip(cols, row)))
+                writer.writerow({k: v.isoformat() if hasattr(v, 'isoformat') else v for k, v in zip(cols, row)})
                 total += 1
                 if progress_cb and total % 1000 == 0:
                     progress_cb(total)
