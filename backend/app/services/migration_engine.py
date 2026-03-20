@@ -1,6 +1,7 @@
 """Core migration engine: copies tables from source to target DB."""
 import csv
 import os
+import re
 import sqlalchemy as sa
 from sqlalchemy import inspect, text, MetaData, Table, Column
 from sqlalchemy import String, Text, Integer, BigInteger, Float, Numeric, Boolean, Date, DateTime
@@ -20,11 +21,33 @@ _DEFAULT_PORTS = {"postgresql": 5432, "mysql": 3306, "mssql": 1433}
 # Forbidden patterns in user-supplied WHERE clauses
 _FILTER_FORBIDDEN = [";", "--", "/*", "*/", "xp_", "exec ", "execute "]
 
+# Safe unquoted identifier patterns per dialect family.
+# PostgreSQL folds unquoted names to lowercase, so any uppercase signals the name
+# was originally quoted at source and must remain quoted on the target.
+# MySQL/MSSQL are case-insensitive, so mixed case alone does not require quoting.
+_SAFE_IDENT_PG = re.compile(r'^[a-z_][a-z0-9_]*$')
+_SAFE_IDENT_CI = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+
 
 def _quote_ident(name: str, dialect: str = "postgresql") -> str:
-    """Quote an SQL identifier using the appropriate quoting style for the dialect."""
+    """Quote an identifier only when the name was quoted at source.
+
+    Uses the safe-identifier pattern for the target dialect: if the name matches,
+    it is emitted as-is and the target DB applies its default case folding.
+    If it does not match (uppercase in PG, or special chars in any dialect),
+    the name is wrapped in the dialect-appropriate quote characters.
+    """
+    if dialect == "postgresql":
+        if _SAFE_IDENT_PG.match(name):
+            return name
+        return '"' + name.replace('"', '""') + '"'
     if dialect == "mysql":
+        if _SAFE_IDENT_CI.match(name):
+            return name
         return "`" + name.replace("`", "``") + "`"
+    # mssql and others
+    if _SAFE_IDENT_CI.match(name):
+        return name
     return '"' + name.replace('"', '""') + '"'
 
 
