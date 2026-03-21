@@ -66,6 +66,25 @@ def _validate_filter(table_filter: str) -> str:
     return table_filter
 
 
+def _sanitize_exc(fn):
+    """Decorator: re-raise any exception with NUL bytes stripped from the message.
+
+    Some database drivers include \\x00 bytes in diagnostic messages. If those
+    exception messages are saved to a database (e.g. PostgreSQL job execution logs),
+    the INSERT/UPDATE itself fails, leaving the execution stuck in 'running' state.
+    This wrapper ensures every public migration function raises a clean exception.
+    """
+    import functools
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            msg = str(e).replace("\x00", "")
+            raise Exception(msg) from None
+    return wrapper
+
+
 def build_engine(db_type: str, host: str, port: int, database: str, username: str, password: str) -> Engine:
     if db_type not in _DRIVERS:
         raise ValueError(f"Unsupported db_type: {db_type}")
@@ -210,6 +229,7 @@ def reflect_table(engine: Engine, table_name: str, schema: Optional[str] = None)
     return Table(table_name, meta, autoload_with=engine, schema=schema)
 
 
+@_sanitize_exc
 def create_target_table(src_engine: Engine, tgt_engine: Engine,
                          src_table: str, tgt_table: str,
                          src_schema: Optional[str], tgt_schema: Optional[str]):
@@ -228,6 +248,7 @@ def table_exists(engine: Engine, table_name: str, schema: Optional[str] = None) 
     return insp.has_table(table_name, schema=schema)
 
 
+@_sanitize_exc
 def migrate_table(
     src_engine: Engine,
     tgt_engine: Engine,
@@ -302,6 +323,7 @@ def parquet_table_exists(directory: str, table: str) -> bool:
     return os.path.isfile(_parquet_path(directory, table))
 
 
+@_sanitize_exc
 def migrate_parquet_to_db(
     src_dir: str,
     tgt_engine: Engine,
@@ -340,6 +362,7 @@ def migrate_parquet_to_db(
     return total
 
 
+@_sanitize_exc
 def migrate_db_to_parquet(
     src_engine: Engine,
     tgt_dir: str,
@@ -394,6 +417,7 @@ def migrate_db_to_parquet(
     return total
 
 
+@_sanitize_exc
 def migrate_parquet_to_parquet(
     src_dir: str,
     tgt_dir: str,
@@ -483,6 +507,7 @@ def csv_table_exists(directory: str, table: str) -> bool:
     return os.path.isfile(_csv_path(directory, table))
 
 
+@_sanitize_exc
 def migrate_csv_to_db(
     src_dir: str,
     tgt_engine: Engine,
@@ -525,6 +550,7 @@ def migrate_csv_to_db(
     return total
 
 
+@_sanitize_exc
 def migrate_db_to_csv(
     src_engine: Engine,
     tgt_dir: str,
@@ -564,6 +590,7 @@ def migrate_db_to_csv(
     return total
 
 
+@_sanitize_exc
 def migrate_csv_to_csv(
     src_dir: str,
     tgt_dir: str,
