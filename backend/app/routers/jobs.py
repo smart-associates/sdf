@@ -1,6 +1,7 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException
 import sqlalchemy as sa
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
@@ -192,7 +193,11 @@ async def execute_job(job_id: int, db: AsyncSession = Depends(get_db)):
     if running.scalar_one_or_none():
         raise HTTPException(409, "Job is already running")
 
-    execution = await start_job_execution(db, job_id)
+    try:
+        execution = await start_job_execution(db, job_id)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "Job is already running")
     return JobExecuteResponse(
         execution_id=execution.id,
         job_id=job_id,
