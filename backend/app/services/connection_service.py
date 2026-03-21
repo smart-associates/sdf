@@ -82,6 +82,9 @@ async def update_connection(db: AsyncSession, conn_id: int, data: dict) -> Optio
         data.pop("password", None)  # keep existing
     for k, v in data.items():
         setattr(conn, k, v)
+    conn.last_test_status = None
+    conn.last_tested_at = None
+    conn.last_test_error = None
     await db.commit()
     await db.refresh(conn)
     conn.password = MASKED
