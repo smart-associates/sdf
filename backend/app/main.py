@@ -22,6 +22,9 @@ async def run_migrations():
     """Apply incremental schema changes to existing databases."""
     from app.database import engine
     from sqlalchemy import text
+    from sqlalchemy.exc import ProgrammingError
+
+    logger = logging.getLogger(__name__)
     migrations = [
         "ALTER TABLE job_execution_tables ADD COLUMN estimated_row_count INTEGER",
         """CREATE UNIQUE INDEX IF NOT EXISTS uq_one_running_per_job
@@ -31,8 +34,10 @@ async def run_migrations():
         try:
             async with engine.begin() as conn:
                 await conn.execute(text(stmt))
-        except Exception:
-            pass  # already applied
+        except ProgrammingError:
+            pass  # already applied (e.g. duplicate column)
+        except Exception as e:
+            logger.warning("Migration failed: %s — %s", stmt.strip().split('\n')[0], e)
 
 async def seed_defaults():
     from app.database import AsyncSessionLocal
