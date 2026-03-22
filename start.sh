@@ -19,6 +19,10 @@ echo "Starting in dev mode..."
 if [ -z "$DATABASE_URL" ] && ! grep -q '^DATABASE_URL=' backend/.env 2>/dev/null; then
   if pg_isready -q 2>/dev/null; then
     echo "PostgreSQL detected — using PostgreSQL backend"
+    if ! psql -h /var/run/postgresql -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw sdf; then
+      echo "Creating 'sdf' database..."
+      createdb -h /var/run/postgresql sdf
+    fi
     export DATABASE_URL="postgresql+asyncpg:///sdf?host=/var/run/postgresql"
     export SYNC_DATABASE_URL="postgresql+psycopg2:///sdf?host=/var/run/postgresql"
   else
