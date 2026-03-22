@@ -18,8 +18,19 @@ _DRIVERS = {
 }
 _DEFAULT_PORTS = {"postgresql": 5432, "mysql": 3306, "mssql": 1433}
 
-# Forbidden patterns in user-supplied WHERE clauses
-_FILTER_FORBIDDEN = [";", "--", "/*", "*/", "xp_", "exec ", "execute "]
+# Forbidden character sequences in user-supplied WHERE clauses
+_FILTER_FORBIDDEN_CHARS = [";", "--", "/*", "*/"]
+
+# SQL keywords that should never appear as standalone words in a WHERE clause.
+# Matched as whole words (word boundaries) to avoid false positives on column names.
+_FILTER_FORBIDDEN_KEYWORDS = re.compile(
+    r"\b("
+    r"INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|"
+    r"EXEC|EXECUTE|CALL|INTO|SET|UNION|COPY|LOAD|IMPORT|"
+    r"pg_sleep|xp_|sp_|dblink|lo_import|lo_export"
+    r")\b",
+    re.IGNORECASE,
+)
 
 # Safe unquoted identifier patterns per dialect family.
 # PostgreSQL folds unquoted names to lowercase, so any uppercase signals the name
@@ -58,11 +69,17 @@ def _full_table(schema: Optional[str], table: str, dialect: str = "postgresql") 
 
 
 def _validate_filter(table_filter: str) -> str:
-    """Reject obviously dangerous patterns in a user-supplied WHERE clause."""
-    lower = table_filter.lower()
-    for tok in _FILTER_FORBIDDEN:
-        if tok in lower:
+    """Reject dangerous patterns in a user-supplied WHERE clause.
+
+    Checks for statement-terminating characters and DML/DDL keywords that
+    have no legitimate use inside a WHERE predicate.
+    """
+    for tok in _FILTER_FORBIDDEN_CHARS:
+        if tok in table_filter:
             raise ValueError(f"table_filter contains forbidden pattern: {tok!r}")
+    match = _FILTER_FORBIDDEN_KEYWORDS.search(table_filter)
+    if match:
+        raise ValueError(f"table_filter contains forbidden keyword: {match.group()!r}")
     return table_filter
 
 
