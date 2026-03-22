@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Edit2, Play, CheckCircle, Square } from 'lucide-react'
 import { getJobs, createJob, updateJob, deleteJob, validateJob, executeJob, Job } from '../api/jobs'
@@ -290,8 +290,8 @@ export default function Jobs() {
                     const pct = t.estimated_row_count && t.estimated_row_count > 0
                       ? Math.min(100, Math.round(t.record_count / t.estimated_row_count * 100))
                       : null
-                    return (
-                      <tr key={t.id}>
+                    return (<Fragment key={t.id}>
+                      <tr>
                         <td className="px-3 py-2 font-mono text-xs">{t.table_name}</td>
                         <td className="px-3 py-2"><StatusBadge status={t.status} /></td>
                         <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -321,7 +321,14 @@ export default function Jobs() {
                           )}
                         </td>
                       </tr>
-                    )
+                      {t.status === 'failed' && t.error_message && (
+                        <tr key={`${t.id}-err`}>
+                          <td colSpan={4} className="px-3 pb-2 pt-0">
+                            <div className="text-xs text-red-600 bg-red-50 rounded px-2 py-1 break-words">{t.error_message}</div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>)
                   })}
                 </tbody>
               </table>
