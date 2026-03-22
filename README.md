@@ -15,15 +15,15 @@ A web-based data migration tool for moving data between databases and file forma
 ## Architecture
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   React + Vite  │────▶│  FastAPI (Python) │────▶│   PostgreSQL    │
-│   (port 5173)   │     │   (port 8000)     │     │   (port 5432)   │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────────┐
+│   React + Vite  │────▶│  FastAPI (Python) │────▶│ PostgreSQL / SQLite │
+│   (port 5173)   │     │   (port 8000)     │     │                     │
+└─────────────────┘     └──────────────────┘     └─────────────────────┘
 ```
 
 - **Frontend:** React 18 + TypeScript + Tailwind CSS + TanStack Query
 - **Backend:** FastAPI + SQLAlchemy (async) + Uvicorn
-- **Database:** PostgreSQL 16
+- **Database:** PostgreSQL (preferred) or SQLite (auto-detected on startup)
 
 ## Quick Start
 

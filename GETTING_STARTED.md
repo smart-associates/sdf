@@ -8,46 +8,58 @@
 ### Local dev path
 - Python 3.9+
 - Node.js 18+ and npm
-- PostgreSQL 14+ running locally
+- PostgreSQL 14+ (optional — SQLite is used automatically if PostgreSQL is not running)
 
 ---
 
 ## Option 1: Local Development (recommended)
 
-### 1. Configure environment
+### 1. Start everything
+
+```bash
+./start.sh dev
+```
+
+`start.sh` auto-detects your database:
+- If PostgreSQL is running locally (checked via `pg_isready`), it connects over the unix socket
+- If PostgreSQL is not running, it falls back to a local SQLite database (`sdf.db`)
+
+This will:
+1. Auto-detect PostgreSQL or fall back to SQLite
+2. Create a Python virtualenv in `backend/.venv`
+3. Install Python dependencies
+4. Start FastAPI on port 8000
+5. Install npm packages
+6. Start Vite dev server on port 5173
+
+### 2. (Optional) Use PostgreSQL
+
+If you want to use PostgreSQL, make sure it's running and create the database:
+
+```bash
+psql -U postgres -c "CREATE DATABASE sdf;"
+```
+
+Then restart with `./start.sh dev` — it will detect PostgreSQL automatically.
+
+### 3. (Optional) Override database settings
+
+To override auto-detection, copy `.env.example` to `backend/.env` and edit it:
 
 ```bash
 cp .env.example backend/.env
 ```
 
-Edit `backend/.env`:
 ```env
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/sdf
-SYNC_DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/sdf
+DATABASE_URL=postgresql+asyncpg:///sdf?host=/var/run/postgresql
+SYNC_DATABASE_URL=postgresql+psycopg2:///sdf?host=/var/run/postgresql
 ENCRYPTION_KEY=your-random-32-char-secret-key!!
 CORS_ORIGINS=["http://localhost:5173"]
 ```
 
 > **Important:** Change `ENCRYPTION_KEY` to a random 32-character string before storing any credentials. This key encrypts database passwords at rest.
 
-### 2. Create the database
-
-```bash
-psql -U postgres -c "CREATE DATABASE sdf;"
-```
-
-### 3. Start everything
-
-```bash
-./start.sh dev
-```
-
-This will:
-1. Create a Python virtualenv in `backend/.venv`
-2. Install Python dependencies
-3. Start FastAPI on port 8000
-4. Install npm packages
-5. Start Vite dev server on port 5173
+When `backend/.env` contains `DATABASE_URL`, auto-detection is skipped.
 
 Open [http://localhost:5173](http://localhost:5173). Press `Ctrl+C` to stop both services.
 
@@ -157,7 +169,8 @@ Navigate to **Settings** to configure system-wide defaults:
 ## Troubleshooting
 
 **Backend won't start — database connection error**
-- Make sure PostgreSQL is running and `DATABASE_URL` in `backend/.env` is correct.
+- If using PostgreSQL, make sure it's running (`pg_isready`) and the `sdf` database exists.
+- If no `.env` is present, `start.sh` auto-detects: PostgreSQL if running, otherwise SQLite.
 - The app creates tables automatically on startup; no manual migrations needed.
 
 **"Connection refused" when testing a connection**
@@ -180,7 +193,7 @@ Navigate to **Settings** to configure system-wide defaults:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | Yes | — | Async PostgreSQL connection string (asyncpg) |
-| `SYNC_DATABASE_URL` | Yes | — | Sync PostgreSQL connection string (psycopg2) |
+| `DATABASE_URL` | No | auto-detected | Async DB connection string (asyncpg or aiosqlite) |
+| `SYNC_DATABASE_URL` | No | auto-detected | Sync DB connection string (psycopg2 or sqlite) |
 | `ENCRYPTION_KEY` | Yes | — | 32-char key for encrypting DB passwords |
 | `CORS_ORIGINS` | No | `["http://localhost:5173"]` | Allowed frontend origins |
