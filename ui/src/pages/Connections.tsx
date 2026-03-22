@@ -26,13 +26,13 @@ export default function Connections() {
 
   const createMut = useMutation({
     mutationFn: (d: Omit<DatabaseConnection, 'id'>) => createConnection(d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); setModal(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); setForm(empty()); setError(''); setModal(null) },
     onError: (e: any) => setError(e.response?.data?.detail || 'Error'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<DatabaseConnection> }) => updateConnection(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); setModal(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); setForm(empty()); setError(''); setModal(null) },
     onError: (e: any) => setError(e.response?.data?.detail || 'Error'),
   })
 
@@ -50,8 +50,8 @@ export default function Connections() {
     },
   })
 
-  const openCreate = () => { setForm(empty()); setError(''); setTestResult(null); setModal('create') }
-  const openEdit = (c: DatabaseConnection) => { setForm({ ...c, password: '********' }); setError(''); setTestResult(null); setModal('edit') }
+  const openCreate = () => { setForm(empty()); setError(''); setTestResult(null); createMut.reset(); updateMut.reset(); setModal('create') }
+  const openEdit = (c: DatabaseConnection) => { setForm({ ...c, password: '********' }); setError(''); setTestResult(null); createMut.reset(); updateMut.reset(); setModal('edit') }
 
   const handleDbTypeChange = (t: string) => {
     if (t === 'filesystem') {

@@ -44,13 +44,13 @@ export default function Jobs() {
 
   const createMut = useMutation({
     mutationFn: (d: Omit<Job, 'id'>) => createJob(d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); setModal(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); setForm(empty()); setError(''); setModal(null) },
     onError: (e: any) => setError(e.response?.data?.detail || 'Error'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Job> }) => updateJob(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); setModal(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); setForm(empty()); setError(''); setModal(null) },
     onError: (e: any) => setError(e.response?.data?.detail || 'Error'),
   })
 
@@ -86,8 +86,8 @@ export default function Jobs() {
     onError: (e: any) => alert(e.response?.data?.detail || 'Stop failed'),
   })
 
-  const openCreate = () => { setForm(empty()); setError(''); setValidation(null); setModal('create') }
-  const openEdit = (j: Job) => { setForm({ ...j }); setError(''); setValidation(null); setModal('edit') }
+  const openCreate = () => { setForm(empty()); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('create') }
+  const openEdit = (j: Job) => { setForm({ ...j }); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('edit') }
 
   const handleSubmit = () => {
     if (modal === 'create') createMut.mutate(form as any)
