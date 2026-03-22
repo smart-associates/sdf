@@ -12,13 +12,20 @@ if [ "$MODE" = "docker" ]; then
   exit 0
 fi
 
-# Dev mode: assumes PostgreSQL is running locally
+# Dev mode
 echo "Starting in dev mode..."
 
-# Copy .env if not present
-if [ ! -f backend/.env ]; then
-  cp .env.example backend/.env
-  echo "Created backend/.env from .env.example — update values as needed"
+# Auto-detect database only if DATABASE_URL is not already set (via .env or environment)
+if [ -z "$DATABASE_URL" ] && ! grep -q '^DATABASE_URL=' backend/.env 2>/dev/null; then
+  if pg_isready -q 2>/dev/null; then
+    echo "PostgreSQL detected — using PostgreSQL backend"
+    export DATABASE_URL="postgresql+asyncpg:///sdf?host=/var/run/postgresql"
+    export SYNC_DATABASE_URL="postgresql+psycopg2:///sdf?host=/var/run/postgresql"
+  else
+    echo "PostgreSQL not running — falling back to SQLite"
+    export DATABASE_URL="sqlite+aiosqlite:///./sdf.db"
+    export SYNC_DATABASE_URL="sqlite:///./sdf.db"
+  fi
 fi
 
 # Start backend
