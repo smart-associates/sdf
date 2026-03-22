@@ -33,6 +33,10 @@ async def run_migrations():
         "ALTER TABLE database_connections ADD COLUMN staging_format VARCHAR(50)",
         "CREATE INDEX IF NOT EXISTS ix_job_executions_job_id ON job_executions (job_id)",
         "CREATE INDEX IF NOT EXISTS ix_job_execution_tables_execution_id ON job_execution_tables (execution_id)",
+        "ALTER TABLE job_executions ALTER COLUMN started_at TYPE TIMESTAMPTZ USING started_at::timestamptz",
+        "ALTER TABLE job_executions ALTER COLUMN completed_at TYPE TIMESTAMPTZ USING completed_at::timestamptz",
+        "ALTER TABLE job_execution_tables ALTER COLUMN started_at TYPE TIMESTAMPTZ USING started_at::timestamptz",
+        "ALTER TABLE job_execution_tables ALTER COLUMN completed_at TYPE TIMESTAMPTZ USING completed_at::timestamptz",
     ]
     for stmt in migrations:
         try:

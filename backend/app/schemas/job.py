@@ -47,4 +47,4 @@ class JobExecuteResponse(BaseModel):
     execution_id: int
     job_id: int
     status: str
-    started_at: str
+    started_at: datetime

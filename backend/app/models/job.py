@@ -23,8 +23,8 @@ class JobExecution(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
     status = Column(String(50), nullable=False, default="running")  # running|success|failed
-    started_at = Column(String(50), nullable=False)
-    completed_at = Column(String(50))
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True))
     record_count = Column(Integer, default=0)
     error_message = Column(Text)
 
@@ -35,8 +35,8 @@ class JobExecutionTable(Base):
     execution_id = Column(Integer, ForeignKey("job_executions.id"), nullable=False)
     table_name = Column(String(512), nullable=False)
     status = Column(String(50), nullable=False, default="running")
-    started_at = Column(String(50), nullable=False)
-    completed_at = Column(String(50))
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True))
     record_count = Column(Integer, default=0)
     estimated_row_count = Column(Integer)  # stats-based estimate, may be None
     error_message = Column(Text)

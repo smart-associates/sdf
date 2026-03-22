@@ -43,8 +43,8 @@ def stop_execution(execution_id: int) -> bool:
     return False
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _get_setting_sync(key: str, default: str) -> str:
@@ -70,7 +70,7 @@ def _create_exec_table_sync(execution_id: int, table_name: str, estimated_row_co
                    (execution_id, table_name, status, started_at, record_count, estimated_row_count)
                    VALUES (:eid, :tn, 'running', :sa, 0, :erc)
                    RETURNING id"""),
-            {"eid": execution_id, "tn": table_name, "sa": _now_iso(), "erc": estimated_row_count}
+            {"eid": execution_id, "tn": table_name, "sa": _now_utc(), "erc": estimated_row_count}
         )
         row = result.fetchone()
     return row[0] if row else None
@@ -213,14 +213,14 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 _update_exec_table_sync(
                     exec_table_id,
                     status="success",
-                    completed_at=_now_iso(),
+                    completed_at=_now_utc(),
                     record_count=count
                 )
             except _StopRequested:
                 _update_exec_table_sync(
                     exec_table_id,
                     status="cancelled",
-                    completed_at=_now_iso(),
+                    completed_at=_now_utc(),
                 )
                 stopped = True
                 break
@@ -229,7 +229,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 _update_exec_table_sync(
                     exec_table_id,
                     status="failed",
-                    completed_at=_now_iso(),
+                    completed_at=_now_utc(),
                     error_message=str(e)[:1000]
                 )
                 any_failed = True
@@ -247,7 +247,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         _update_execution_sync(
             execution_id,
             status=final_status,
-            completed_at=_now_iso(),
+            completed_at=_now_utc(),
             record_count=total_records,
             error_message=final_error
         )
@@ -256,7 +256,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         _update_execution_sync(
             execution_id,
             status="failed",
-            completed_at=_now_iso(),
+            completed_at=_now_utc(),
             error_message=str(e)[:1000]
         )
     finally:
@@ -273,7 +273,7 @@ async def start_job_execution(db: AsyncSession, job_id: int) -> JobExecution:
     execution = JobExecution(
         job_id=job_id,
         status="running",
-        started_at=_now_iso(),
+        started_at=_now_utc(),
         record_count=0
     )
     db.add(execution)
