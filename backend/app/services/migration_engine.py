@@ -2,10 +2,12 @@
 import csv
 import os
 import re
+import time
 import sqlalchemy as sa
 from sqlalchemy import inspect, text, MetaData, Table, Column
 from sqlalchemy import String, Text, Integer, BigInteger, Float, Numeric, Boolean, Date, DateTime
 from sqlalchemy.engine import Engine, URL
+from sqlalchemy.exc import OperationalError, DBAPIError
 from typing import Callable, Optional
 import logging
 
@@ -324,6 +326,10 @@ def _sanitize_value(v):
     return v
 
 
+_MAX_RETRIES = 3
+_RETRY_BACKOFF = (1, 3, 10)  # seconds between retries
+
+
 def _insert_batch(engine: Engine, tgt_schema: Optional[str], tgt_table: str,
                   cols: list[str], rows: list[dict]):
     dialect = engine.dialect.name
@@ -333,8 +339,18 @@ def _insert_batch(engine: Engine, tgt_schema: Optional[str], tgt_table: str,
     placeholders = ", ".join(f":p{i}" for i in range(len(cols)))
     sql = text(f"INSERT INTO {tgt_full} ({col_idents}) VALUES ({placeholders})")
     mapped = [{f"p{i}": _sanitize_value(row[c]) for i, c in enumerate(cols)} for row in rows]
-    with engine.begin() as conn:
-        conn.execute(sql, mapped)
+    for attempt in range(_MAX_RETRIES):
+        try:
+            with engine.begin() as conn:
+                conn.execute(sql, mapped)
+            return
+        except (OperationalError, DBAPIError) as e:
+            if attempt == _MAX_RETRIES - 1:
+                raise
+            delay = _RETRY_BACKOFF[attempt]
+            logger.warning("Batch insert failed (attempt %d/%d), retrying in %ds: %s",
+                           attempt + 1, _MAX_RETRIES, delay, e)
+            time.sleep(delay)
 
 
 # ---------------------------------------------------------------------------
