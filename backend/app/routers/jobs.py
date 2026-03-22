@@ -183,6 +183,10 @@ async def execute_job(job_id: int, db: AsyncSession = Depends(get_db)):
     if not job:
         raise HTTPException(404, "Job not found")
 
+    tables = [t.strip() for t in (job.source_tables or "").splitlines() if t.strip()]
+    if not tables:
+        raise HTTPException(400, "Job has no source tables defined")
+
     # Prevent duplicate concurrent executions of the same job
     running = await db.execute(
         select(JobExecution).where(

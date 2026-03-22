@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from typing import Optional
 from datetime import datetime
 
@@ -11,6 +11,12 @@ class JobBase(BaseModel):
     target_schema: Optional[str] = None
     create_target_table: bool = False
     migration_mode: str = "append"  # append|truncate_load
+
+    @validator("source_tables")
+    def source_tables_not_blank(cls, v):
+        if v is not None and not any(line.strip() for line in v.splitlines()):
+            raise ValueError("source_tables must contain at least one non-empty table name")
+        return v
 
 class JobCreate(JobBase):
     pass
