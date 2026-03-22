@@ -14,6 +14,7 @@ logging.basicConfig(level=logging.INFO)
 async def lifespan(app: FastAPI):
     await init_db()
     await run_migrations()
+    await recover_stale_executions()
     await seed_defaults()
     yield
 
@@ -38,6 +39,34 @@ async def run_migrations():
             pass  # already applied (e.g. duplicate column)
         except Exception as e:
             logger.warning("Migration failed: %s — %s", stmt.strip().split('\n')[0], e)
+
+async def recover_stale_executions():
+    """Mark any orphaned 'running' executions as failed on startup."""
+    from app.database import engine
+    from sqlalchemy import text
+
+    logger = logging.getLogger(__name__)
+    async with engine.begin() as conn:
+        result = await conn.execute(text(
+            """UPDATE job_executions
+               SET status = 'failed',
+                   completed_at = now(),
+                   error_message = 'Process restarted while execution was running'
+               WHERE status = 'running'
+               RETURNING id"""
+        ))
+        rows = result.fetchall()
+        if rows:
+            exec_ids = [r[0] for r in rows]
+            logger.warning("Recovered %d stale execution(s): %s", len(exec_ids), exec_ids)
+            await conn.execute(text(
+                """UPDATE job_execution_tables
+                   SET status = 'failed',
+                       completed_at = now()
+                   WHERE execution_id = ANY(:ids)
+                     AND status = 'running'"""
+            ), {"ids": exec_ids})
+
 
 async def seed_defaults():
     from app.database import AsyncSessionLocal
