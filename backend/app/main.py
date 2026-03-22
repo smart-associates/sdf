@@ -31,6 +31,8 @@ async def run_migrations():
         """CREATE UNIQUE INDEX IF NOT EXISTS uq_one_running_per_job
            ON job_executions (job_id) WHERE status = 'running'""",
         "ALTER TABLE database_connections ADD COLUMN staging_format VARCHAR(50)",
+        "CREATE INDEX IF NOT EXISTS ix_job_executions_job_id ON job_executions (job_id)",
+        "CREATE INDEX IF NOT EXISTS ix_job_execution_tables_execution_id ON job_execution_tables (execution_id)",
     ]
     for stmt in migrations:
         try:
