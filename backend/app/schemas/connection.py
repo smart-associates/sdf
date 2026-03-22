@@ -4,11 +4,12 @@ from datetime import datetime
 
 class DatabaseConnectionBase(BaseModel):
     name: str
-    db_type: str  # postgresql|mysql|mssql|csv|parquet
+    db_type: str  # postgresql|mysql|mssql|filesystem
     host: Optional[str] = None
     port: Optional[int] = None
-    database: str  # for csv: directory path
+    database: str  # for filesystem: directory path
     username: Optional[str] = None
+    staging_format: Optional[str] = None  # csv|parquet (filesystem connections only)
 
 class DatabaseConnectionCreate(DatabaseConnectionBase):
     password: Optional[str] = None

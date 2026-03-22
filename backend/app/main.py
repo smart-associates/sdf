@@ -30,6 +30,7 @@ async def run_migrations():
         "ALTER TABLE job_execution_tables ADD COLUMN estimated_row_count INTEGER",
         """CREATE UNIQUE INDEX IF NOT EXISTS uq_one_running_per_job
            ON job_executions (job_id) WHERE status = 'running'""",
+        "ALTER TABLE database_connections ADD COLUMN staging_format VARCHAR(50)",
     ]
     for stmt in migrations:
         try:

@@ -3,12 +3,13 @@ import client from './client'
 export interface DatabaseConnection {
   id: number
   name: string
-  db_type: 'postgresql' | 'mysql' | 'mssql' | 'csv' | 'parquet'
+  db_type: 'postgresql' | 'mysql' | 'mssql' | 'filesystem'
   host?: string
   port?: number
-  database: string  // for csv: directory path
+  database: string  // for filesystem: directory path
   username?: string
   password?: string
+  staging_format?: string
   last_test_status?: string
   last_tested_at?: string
   last_test_error?: string

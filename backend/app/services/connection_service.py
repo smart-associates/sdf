@@ -117,7 +117,7 @@ async def test_connection(db: AsyncSession, conn_id: int) -> dict:
 
     tested_at = datetime.now(timezone.utc).isoformat()
 
-    if conn.db_type in ("csv", "parquet"):
+    if conn.db_type == "filesystem":
         directory = conn.database or ""
         try:
             os.makedirs(directory, exist_ok=True)

@@ -111,9 +111,8 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
 
         batch_size = int(_get_setting_sync("batch_size", "1000"))
 
-        _FILE_TYPES = ("csv", "parquet")
-        src_is_file = src["db_type"] in _FILE_TYPES
-        tgt_is_file = tgt["db_type"] in _FILE_TYPES
+        src_is_file = src["db_type"] == "filesystem"
+        tgt_is_file = tgt["db_type"] == "filesystem"
         src_dir = src["database"] if src_is_file else None
         tgt_dir = tgt["database"] if tgt_is_file else None
 
@@ -152,10 +151,12 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
 
             # Gather estimated row count from source statistics (best-effort)
             try:
-                if src_is_file and src["db_type"] == "csv":
-                    estimated = get_csv_estimated_row_count(src_dir, src_table)
-                elif src_is_file and src["db_type"] == "parquet":
-                    estimated = get_parquet_estimated_row_count(src_dir, src_table)
+                if src_is_file:
+                    src_fmt = src.get("staging_format") or "parquet"
+                    if src_fmt == "csv":
+                        estimated = get_csv_estimated_row_count(src_dir, src_table)
+                    else:
+                        estimated = get_parquet_estimated_row_count(src_dir, src_table)
                 else:
                     estimated = get_estimated_row_count(src_engine, src_table, src_schema)
             except Exception:
@@ -178,18 +179,27 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                     _update_exec_table_sync(exec_table_id, record_count=n)
                     _update_execution_sync(execution_id, record_count=total_records + n)
 
-                if src_type == "csv" and tgt_type == "csv":
-                    count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
-                elif src_type == "csv":
-                    count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
-                elif tgt_type == "csv":
-                    count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb, batch_size)
-                elif src_type == "parquet" and tgt_type == "parquet":
-                    count = migrate_parquet_to_parquet(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
-                elif src_type == "parquet":
-                    count = migrate_parquet_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
-                elif tgt_type == "parquet":
-                    count = migrate_db_to_parquet(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb)
+                if src_type == "filesystem" and tgt_type == "filesystem":
+                    src_fmt = src.get("staging_format") or "parquet"
+                    tgt_fmt = tgt.get("staging_format") or "parquet"
+                    if src_fmt == "csv" and tgt_fmt == "csv":
+                        count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
+                    elif src_fmt == "parquet" and tgt_fmt == "parquet":
+                        count = migrate_parquet_to_parquet(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
+                    else:
+                        raise ValueError(f"Cross-format filesystem copies ('{src_fmt}' → '{tgt_fmt}') are not supported")
+                elif src_type == "filesystem":
+                    src_fmt = src.get("staging_format") or "parquet"
+                    if src_fmt == "csv":
+                        count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
+                    else:
+                        count = migrate_parquet_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
+                elif tgt_type == "filesystem":
+                    tgt_fmt = tgt.get("staging_format") or "parquet"
+                    if tgt_fmt == "csv":
+                        count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb, batch_size)
+                    else:
+                        count = migrate_db_to_parquet(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb)
                 else:
                     count = migrate_table(
                         src_engine, tgt_engine,

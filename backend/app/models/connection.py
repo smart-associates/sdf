@@ -7,12 +7,13 @@ class DatabaseConnection(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False)
-    db_type = Column(String(50), nullable=False)  # postgresql|mysql|mssql
+    db_type = Column(String(50), nullable=False)  # postgresql|mysql|mssql|filesystem
     host = Column(String(255), nullable=True)
     port = Column(Integer)
     database = Column(String(255), nullable=False)
     username = Column(String(255))
     password = Column(String(1024))  # encrypted
+    staging_format = Column(String(50))  # csv|parquet (filesystem connections only)
     last_test_status = Column(String(50))   # success|failed
     last_tested_at = Column(String(50))
     last_test_error = Column(String(2048))
