@@ -101,6 +101,8 @@ def _load_job_sync(job_id: int) -> dict:
 
 def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event):
     """Runs in a background thread (not async) since DB drivers are blocking."""
+    src_engine = None
+    tgt_engine = None
     try:
         data = _load_job_sync(job_id)
         job = data["job"]
@@ -223,11 +225,6 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 any_failed = True
                 # Continue processing remaining tables instead of aborting
 
-        if not src_is_file and src_engine:
-            src_engine.dispose()
-        if not tgt_is_file and tgt_engine:
-            tgt_engine.dispose()
-
         if stopped:
             final_status = "cancelled"
             final_error = "Execution stopped by user"
@@ -253,6 +250,10 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
             error_message=str(e)[:1000]
         )
     finally:
+        if src_engine is not None:
+            src_engine.dispose()
+        if tgt_engine is not None:
+            tgt_engine.dispose()
         with _stop_events_lock:
             _stop_events.pop(execution_id, None)
 
