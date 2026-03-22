@@ -183,7 +183,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 elif src_type == "csv":
                     count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
                 elif tgt_type == "csv":
-                    count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb)
+                    count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb, batch_size)
                 elif src_type == "parquet" and tgt_type == "parquet":
                     count = migrate_parquet_to_parquet(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
                 elif src_type == "parquet":

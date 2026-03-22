@@ -315,6 +315,15 @@ def migrate_table(
     return total
 
 
+def _sanitize_value(v):
+    """Strip NUL bytes — PostgreSQL rejects \\x00 in text/varchar columns."""
+    if isinstance(v, str):
+        return v.replace("\x00", "")
+    if isinstance(v, (bytes, bytearray)):
+        return v.replace(b"\x00", b"")
+    return v
+
+
 def _insert_batch(engine: Engine, tgt_schema: Optional[str], tgt_table: str,
                   cols: list[str], rows: list[dict]):
     dialect = engine.dialect.name
@@ -323,7 +332,7 @@ def _insert_batch(engine: Engine, tgt_schema: Optional[str], tgt_table: str,
     # Use indexed placeholders to avoid issues with special chars in column names
     placeholders = ", ".join(f":p{i}" for i in range(len(cols)))
     sql = text(f"INSERT INTO {tgt_full} ({col_idents}) VALUES ({placeholders})")
-    mapped = [{f"p{i}": row[c] for i, c in enumerate(cols)} for row in rows]
+    mapped = [{f"p{i}": _sanitize_value(row[c]) for i, c in enumerate(cols)} for row in rows]
     with engine.begin() as conn:
         conn.execute(sql, mapped)
 
@@ -577,6 +586,7 @@ def migrate_db_to_csv(
     table_filter: Optional[str],
     migration_mode: str,
     progress_cb: Optional[Callable[[int], None]] = None,
+    batch_size: int = 1000,
 ) -> int:
     """Stream rows from a source DB table and write to a CSV file."""
     src_full = _full_table(src_schema, src_table, src_engine.dialect.name)
@@ -598,9 +608,9 @@ def migrate_db_to_csv(
             if not append_mode:
                 writer.writeheader()
             for row in result:
-                writer.writerow({k: v.isoformat() if hasattr(v, 'isoformat') else v for k, v in zip(cols, row)})
+                writer.writerow({k: v.isoformat() if hasattr(v, 'isoformat') else ("" if v is None else v) for k, v in zip(cols, row)})
                 total += 1
-                if progress_cb and total % 1000 == 0:
+                if progress_cb and total % batch_size == 0:
                     progress_cb(total)
     if progress_cb:
         progress_cb(total)
