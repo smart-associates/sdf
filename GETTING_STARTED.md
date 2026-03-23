@@ -117,12 +117,12 @@ Navigate to **Connections** → **Add Connection**.
 
 Fill in:
 - **Name** — a label for this connection (e.g. "Production Postgres")
-- **Type** — postgresql, mysql, mssql, csv, or parquet
+- **Type** — `postgresql`, `mysql`, `mssql`, or `filesystem`
 - **Host / Port / Database / Username / Password** — your DB credentials
 
 Click **Test** to verify the connection before saving.
 
-For CSV or Parquet connections, set **Host** to the directory path containing your files (e.g. `/data/exports`).
+For filesystem connections (CSV or Parquet files), set **Database** to the directory path containing your files (e.g. `/data/exports`) and set **Staging Format** to `csv` or `parquet`.
 
 ### 2. Create a migration job
 
@@ -154,15 +154,13 @@ Click a job row to see per-table progress, estimated row counts, and status.
 
 ## Settings
 
-Navigate to **Settings** to configure system-wide defaults:
+Navigate to **Settings** to configure system-wide defaults. The following setting is seeded automatically on first startup:
 
-| Key | Description |
-|-----|-------------|
-| `default_output_path` | Default directory for CSV/Parquet output |
-| `parallel_jobs` | Max concurrent job executions |
-| `default_delimiter` | CSV column delimiter |
-| `include_header` | Include header row in CSV output |
-| `compress_output` | Compress output files |
+| Key | Default | Description |
+|-----|---------|-------------|
+| `batch_size` | `1000` | Number of rows per INSERT batch |
+
+You can add additional custom settings via the Settings page or the `/api/settings` API endpoint.
 
 ---
 

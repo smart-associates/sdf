@@ -80,23 +80,36 @@ Interactive API docs are available at [http://localhost:8000/docs](http://localh
 |--------|------|-------------|
 | GET | `/api/connections` | List database connections |
 | POST | `/api/connections` | Create a connection |
+| GET | `/api/connections/{id}` | Get a connection |
+| PUT | `/api/connections/{id}` | Update a connection |
+| DELETE | `/api/connections/{id}` | Delete a connection |
 | POST | `/api/connections/{id}/test` | Test a connection |
 | GET | `/api/jobs` | List jobs |
 | POST | `/api/jobs` | Create a job |
+| GET | `/api/jobs/{id}` | Get a job |
+| PUT | `/api/jobs/{id}` | Update a job |
+| DELETE | `/api/jobs/{id}` | Delete a job |
+| POST | `/api/jobs/{id}/validate` | Validate job configuration |
 | POST | `/api/jobs/{id}/execute` | Run a job |
 | POST | `/api/jobs/{id}/executions/{exec_id}/stop` | Stop a running job |
-| GET | `/api/executions/stats` | System-wide stats |
+| GET | `/api/executions` | List executions (filter by `job_id`, paginate with `limit`/`offset`) |
+| GET | `/api/executions/{id}` | Get execution with per-table details |
+| GET | `/api/executions/stats` | System-wide stats and recent executions |
+| GET | `/api/settings` | List settings |
+| POST | `/api/settings` | Create a setting |
+| GET | `/api/settings/{id}` | Get a setting |
+| PUT | `/api/settings/{id}` | Update a setting |
+| DELETE | `/api/settings/{id}` | Delete a setting |
 | GET | `/health` | Health check |
 
-## Supported Database Types
+## Supported Connection Types
 
-| Type | Source | Target |
-|------|--------|--------|
-| PostgreSQL | Yes | Yes |
-| MySQL | Yes | Yes |
-| MSSQL | Yes | Yes |
-| CSV | Yes | Yes |
-| Parquet | Yes | Yes |
+| Type | db_type | Source | Target | Notes |
+|------|---------|--------|--------|-------|
+| PostgreSQL | `postgresql` | Yes | Yes | |
+| MySQL | `mysql` | Yes | Yes | |
+| MSSQL | `mssql` | Yes | Yes | |
+| Filesystem | `filesystem` | Yes | Yes | Set `staging_format` to `csv` or `parquet`; `database` is the directory path |
 
 ## Migration Modes
 
