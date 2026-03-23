@@ -17,6 +17,9 @@ async def lifespan(app: FastAPI):
     await recover_stale_executions()
     await seed_defaults()
     yield
+    # Graceful shutdown: signal running jobs and wait for threads to finish
+    from app.services.job_runner import shutdown_all
+    shutdown_all()
 
 
 async def run_migrations():

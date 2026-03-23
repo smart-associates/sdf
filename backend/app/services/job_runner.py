@@ -30,6 +30,7 @@ _sync_engine = create_engine(settings.sync_database_url)
 
 # Registry of stop events keyed by execution_id
 _stop_events: dict = {}
+_active_threads: dict[int, threading.Thread] = {}
 _stop_events_lock = threading.Lock()
 
 
@@ -41,6 +42,27 @@ def stop_execution(execution_id: int) -> bool:
         event.set()
         return True
     return False
+
+
+def shutdown_all(timeout: float = 30) -> None:
+    """Signal all running executions to stop and wait for threads to finish.
+
+    Called during application shutdown so that non-daemon threads can complete
+    gracefully instead of being killed mid-migration.
+    """
+    with _stop_events_lock:
+        events = list(_stop_events.values())
+        threads = list(_active_threads.values())
+    if not threads:
+        return
+    logger.info("Shutting down %d running execution(s)…", len(threads))
+    for event in events:
+        event.set()
+    for thread in threads:
+        thread.join(timeout=timeout)
+    still_alive = [t for t in threads if t.is_alive()]
+    if still_alive:
+        logger.warning("%d thread(s) did not finish within %ds", len(still_alive), timeout)
 
 
 def _now_utc() -> datetime:
@@ -266,6 +288,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
             tgt_engine.dispose()
         with _stop_events_lock:
             _stop_events.pop(execution_id, None)
+            _active_threads.pop(execution_id, None)
 
 
 async def start_job_execution(db: AsyncSession, job_id: int) -> JobExecution:
@@ -287,7 +310,9 @@ async def start_job_execution(db: AsyncSession, job_id: int) -> JobExecution:
     thread = threading.Thread(
         target=_run_job_thread,
         args=(job_id, execution.id, stop_event),
-        daemon=True
+        daemon=False
     )
+    with _stop_events_lock:
+        _active_threads[execution.id] = thread
     thread.start()
     return execution
