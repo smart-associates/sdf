@@ -92,7 +92,18 @@ async def update_connection(db: AsyncSession, conn_id: int, data: dict) -> Optio
 
 
 async def delete_connection(db: AsyncSession, conn_id: int) -> bool:
-    from app.models.job import Job
+    from app.models.job import Job, JobExecution
+    # Check for running executions on jobs that use this connection
+    running_result = await db.execute(
+        select(JobExecution.id)
+        .join(Job, JobExecution.job_id == Job.id)
+        .where(
+            (Job.source_connection_id == conn_id) | (Job.target_connection_id == conn_id),
+            JobExecution.status == "running"
+        )
+    )
+    if running_result.scalar_one_or_none():
+        raise ValueError("Connection is used by a job that is currently running")
     jobs_result = await db.execute(
         select(Job).where(
             (Job.source_connection_id == conn_id) | (Job.target_connection_id == conn_id)

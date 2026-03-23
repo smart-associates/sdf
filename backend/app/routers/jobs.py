@@ -79,6 +79,15 @@ async def delete_job(job_id: int, db: AsyncSession = Depends(get_db)):
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(404, "Job not found")
+    # Block deletion while a job is actively running
+    running = await db.execute(
+        select(JobExecution.id).where(
+            JobExecution.job_id == job_id,
+            JobExecution.status == "running"
+        )
+    )
+    if running.scalar_one_or_none():
+        raise HTTPException(409, "Cannot delete job while it is running")
     # Delete child execution records to avoid orphaned rows
     exec_ids_result = await db.execute(
         select(JobExecution.id).where(JobExecution.job_id == job_id)
