@@ -633,6 +633,265 @@ def migrate_db_to_csv(
     return total
 
 
+# ---------------------------------------------------------------------------
+# Avro helpers
+# ---------------------------------------------------------------------------
+
+def _avro_path(directory: str, table: str) -> str:
+    return os.path.join(directory, f"{table}.avro")
+
+
+def avro_table_exists(directory: str, table: str) -> bool:
+    return os.path.isfile(_avro_path(directory, table))
+
+
+def get_avro_estimated_row_count(directory: str, table: str) -> Optional[int]:
+    """Count rows in an Avro file. Returns None on error."""
+    path = _avro_path(directory, table)
+    if not os.path.isfile(path):
+        return None
+    try:
+        import fastavro
+        count = 0
+        with open(path, "rb") as f:
+            reader = fastavro.reader(f)
+            for _ in reader:
+                count += 1
+        return count
+    except Exception:
+        return None
+
+
+def _infer_avro_schema(rows: list[dict], cols: list[str], table: str) -> dict:
+    """Infer an Avro schema from the first row, falling back to string for unknowns."""
+    import datetime as dt
+    fields = []
+    sample = rows[0] if rows else {}
+    for c in cols:
+        v = sample.get(c)
+        if isinstance(v, bool):
+            avro_type = ["null", "boolean"]
+        elif isinstance(v, int):
+            avro_type = ["null", "long"]
+        elif isinstance(v, float):
+            avro_type = ["null", "double"]
+        elif isinstance(v, dt.datetime):
+            avro_type = ["null", "string"]
+        elif isinstance(v, dt.date):
+            avro_type = ["null", "string"]
+        else:
+            avro_type = ["null", "string"]
+        fields.append({"name": c, "type": avro_type})
+    return {"type": "record", "name": table, "fields": fields}
+
+
+def _row_to_avro(row: dict) -> dict:
+    """Convert a row dict to Avro-compatible values (datetimes to ISO strings)."""
+    out = {}
+    for k, v in row.items():
+        if hasattr(v, "isoformat"):
+            out[k] = v.isoformat()
+        elif v is None:
+            out[k] = None
+        else:
+            out[k] = v
+    return out
+
+
+@_sanitize_exc
+def migrate_avro_to_db(
+    src_dir: str,
+    tgt_engine: Engine,
+    src_table: str,
+    tgt_table: str,
+    tgt_schema: Optional[str],
+    migration_mode: str,
+    batch_size: int,
+    progress_cb: Optional[Callable[[int], None]] = None,
+) -> int:
+    """Read an Avro file and insert rows into a target DB table."""
+    import fastavro
+
+    path = _avro_path(src_dir, src_table)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Avro file not found: {path}")
+
+    dialect = tgt_engine.dialect.name
+    tgt_full = _full_table(tgt_schema, tgt_table, dialect)
+    if migration_mode == "truncate_load":
+        with tgt_engine.begin() as conn:
+            conn.execute(text(f"TRUNCATE TABLE {tgt_full}"))
+
+    total = 0
+    with open(path, "rb") as f:
+        reader = fastavro.reader(f)
+        cols = None
+        batch: list[dict] = []
+        for record in reader:
+            if cols is None:
+                cols = list(record.keys())
+            batch.append(record)
+            if len(batch) >= batch_size:
+                _insert_batch(tgt_engine, tgt_schema, tgt_table, cols, batch)
+                total += len(batch)
+                if progress_cb:
+                    progress_cb(total)
+                batch = []
+        if batch and cols:
+            _insert_batch(tgt_engine, tgt_schema, tgt_table, cols, batch)
+            total += len(batch)
+            if progress_cb:
+                progress_cb(total)
+    return total
+
+
+@_sanitize_exc
+def migrate_db_to_avro(
+    src_engine: Engine,
+    tgt_dir: str,
+    src_table: str,
+    tgt_table: str,
+    src_schema: Optional[str],
+    table_filter: Optional[str],
+    migration_mode: str,
+    progress_cb: Optional[Callable[[int], None]] = None,
+) -> int:
+    """Stream rows from a source DB table and write to an Avro file."""
+    import fastavro
+
+    src_full = _full_table(src_schema, src_table, src_engine.dialect.name)
+    query = f"SELECT * FROM {src_full}"
+    if table_filter:
+        query += f" WHERE {_validate_filter(table_filter)}"
+
+    os.makedirs(tgt_dir, exist_ok=True)
+    path = _avro_path(tgt_dir, tgt_table)
+
+    total = 0
+    with src_engine.connect() as src_conn:
+        result = src_conn.execution_options(stream_results=True).execute(text(query))
+        cols = list(result.keys())
+
+        # Collect first batch to infer schema
+        batch: list[dict] = []
+        for row in result:
+            batch.append(dict(zip(cols, row)))
+            if len(batch) >= 10000:
+                break
+
+        if not batch:
+            # Empty result: write an empty Avro file with string-only schema
+            schema = _infer_avro_schema([], cols, tgt_table)
+            parsed_schema = fastavro.parse_schema(schema)
+            with open(path, "wb") as f:
+                fastavro.writer(f, parsed_schema, [])
+            if progress_cb:
+                progress_cb(0)
+            return 0
+
+        schema = _infer_avro_schema(batch, cols, tgt_table)
+        parsed_schema = fastavro.parse_schema(schema)
+
+        if migration_mode == "append" and os.path.isfile(path):
+            # Read existing records, then rewrite with new data appended
+            existing_records = []
+            with open(path, "rb") as f:
+                reader = fastavro.reader(f)
+                for rec in reader:
+                    existing_records.append(rec)
+            total += len(existing_records)
+            with open(path, "wb") as f:
+                fastavro.writer(f, parsed_schema, existing_records + [_row_to_avro(r) for r in batch])
+        else:
+            with open(path, "wb") as f:
+                fastavro.writer(f, parsed_schema, [_row_to_avro(r) for r in batch])
+
+        total += len(batch)
+        if progress_cb:
+            progress_cb(total)
+
+        # Continue with remaining rows - read all, then rewrite
+        remaining: list[dict] = []
+        for row in result:
+            remaining.append(_row_to_avro(dict(zip(cols, row))))
+            if len(remaining) >= 10000:
+                # Append batch to existing file
+                existing_records = []
+                with open(path, "rb") as f:
+                    reader = fastavro.reader(f)
+                    for rec in reader:
+                        existing_records.append(rec)
+                with open(path, "wb") as f:
+                    fastavro.writer(f, parsed_schema, existing_records + remaining)
+                total += len(remaining)
+                if progress_cb:
+                    progress_cb(total)
+                remaining = []
+
+        if remaining:
+            existing_records = []
+            with open(path, "rb") as f:
+                reader = fastavro.reader(f)
+                for rec in reader:
+                    existing_records.append(rec)
+            with open(path, "wb") as f:
+                fastavro.writer(f, parsed_schema, existing_records + remaining)
+            total += len(remaining)
+            if progress_cb:
+                progress_cb(total)
+
+    return total
+
+
+@_sanitize_exc
+def migrate_avro_to_avro(
+    src_dir: str,
+    tgt_dir: str,
+    src_table: str,
+    tgt_table: str,
+    migration_mode: str,
+    progress_cb: Optional[Callable[[int], None]] = None,
+) -> int:
+    """Copy an Avro file to another directory, optionally appending."""
+    import fastavro
+
+    src_path = _avro_path(src_dir, src_table)
+    if not os.path.isfile(src_path):
+        raise FileNotFoundError(f"Avro file not found: {src_path}")
+
+    os.makedirs(tgt_dir, exist_ok=True)
+    tgt_path = _avro_path(tgt_dir, tgt_table)
+
+    # Read all source records and schema
+    src_records = []
+    with open(src_path, "rb") as f:
+        reader = fastavro.reader(f)
+        schema = reader.writer_schema
+        for rec in reader:
+            src_records.append(rec)
+
+    total = 0
+    if migration_mode == "append" and os.path.isfile(tgt_path):
+        existing = []
+        with open(tgt_path, "rb") as f:
+            reader = fastavro.reader(f)
+            for rec in reader:
+                existing.append(rec)
+        total += len(existing)
+        parsed_schema = fastavro.parse_schema(schema)
+        with open(tgt_path, "wb") as f:
+            fastavro.writer(f, parsed_schema, existing + src_records)
+    else:
+        parsed_schema = fastavro.parse_schema(schema)
+        with open(tgt_path, "wb") as f:
+            fastavro.writer(f, parsed_schema, src_records)
+
+    total += len(src_records)
+    if progress_cb:
+        progress_cb(total)
+    return total
+
+
 @_sanitize_exc
 def migrate_csv_to_csv(
     src_dir: str,

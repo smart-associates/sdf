@@ -15,7 +15,9 @@ from app.services.migration_engine import (
     build_engine, create_target_table, migrate_table, table_exists,
     csv_table_exists, migrate_csv_to_db, migrate_db_to_csv, migrate_csv_to_csv,
     parquet_table_exists, migrate_parquet_to_db, migrate_db_to_parquet, migrate_parquet_to_parquet,
+    avro_table_exists, migrate_avro_to_db, migrate_db_to_avro, migrate_avro_to_avro,
     get_estimated_row_count, get_csv_estimated_row_count, get_parquet_estimated_row_count,
+    get_avro_estimated_row_count,
 )
 
 logger = logging.getLogger(__name__)
@@ -177,6 +179,8 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                     src_fmt = src.get("staging_format") or "parquet"
                     if src_fmt == "csv":
                         estimated = get_csv_estimated_row_count(src_dir, src_table)
+                    elif src_fmt == "avro":
+                        estimated = get_avro_estimated_row_count(src_dir, src_table)
                     else:
                         estimated = get_parquet_estimated_row_count(src_dir, src_table)
                 else:
@@ -208,18 +212,24 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                         count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
                     elif src_fmt == "parquet" and tgt_fmt == "parquet":
                         count = migrate_parquet_to_parquet(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
+                    elif src_fmt == "avro" and tgt_fmt == "avro":
+                        count = migrate_avro_to_avro(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
                     else:
                         raise ValueError(f"Cross-format filesystem copies ('{src_fmt}' → '{tgt_fmt}') are not supported")
                 elif src_type == "filesystem":
                     src_fmt = src.get("staging_format") or "parquet"
                     if src_fmt == "csv":
                         count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
+                    elif src_fmt == "avro":
+                        count = migrate_avro_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
                     else:
                         count = migrate_parquet_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
                 elif tgt_type == "filesystem":
                     tgt_fmt = tgt.get("staging_format") or "parquet"
                     if tgt_fmt == "csv":
                         count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb, batch_size)
+                    elif tgt_fmt == "avro":
+                        count = migrate_db_to_avro(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb)
                     else:
                         count = migrate_db_to_parquet(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb)
                 else:

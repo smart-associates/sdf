@@ -10,7 +10,7 @@ from app.models.connection import DatabaseConnection
 from app.schemas.job import JobCreate, JobUpdate, JobResponse, JobValidationResponse, JobValidationItem, JobExecuteResponse
 from app.services.job_runner import start_job_execution, stop_execution
 from app.services.encryption import decrypt
-from app.services.migration_engine import build_engine, table_exists, csv_table_exists, parquet_table_exists
+from app.services.migration_engine import build_engine, table_exists, csv_table_exists, parquet_table_exists, avro_table_exists
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -123,7 +123,7 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
     try:
         if src.db_type == "filesystem":
             fmt = src.staging_format or "parquet"
-            check_fn = csv_table_exists if fmt == "csv" else parquet_table_exists
+            check_fn = csv_table_exists if fmt == "csv" else avro_table_exists if fmt == "avro" else parquet_table_exists
             for entry in tables:
                 table = entry.split(".", 1)[1] if "." in entry else entry
                 exists = check_fn(src.database or "", table)

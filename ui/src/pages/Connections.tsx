@@ -173,6 +173,7 @@ export default function Connections() {
                     <select className="w-full border rounded-lg px-3 py-2 text-sm" value={form.staging_format || 'parquet'} onChange={e => setForm(f => ({ ...f, staging_format: e.target.value }))}>
                       <option value="parquet">Parquet</option>
                       <option value="csv">CSV</option>
+                      <option value="avro">Avro</option>
                     </select>
                   </div>
                 </>
