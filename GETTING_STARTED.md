@@ -122,7 +122,7 @@ Fill in:
 
 Click **Test** to verify the connection before saving.
 
-For filesystem connections (CSV or Parquet files), set **Database** to the directory path containing your files (e.g. `/data/exports`) and set **Staging Format** to `csv` or `parquet`.
+For filesystem connections (CSV, Parquet, or Avro files), set **Database** to the directory path containing your files (e.g. `/data/exports`) and set **Staging Format** to `csv`, `parquet`, or `avro`.
 
 ### 2. Create a migration job
 

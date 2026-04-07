@@ -4,13 +4,19 @@ A web-based data migration tool for moving data between databases and file forma
 
 ## Features
 
-- **Multi-source support** — PostgreSQL, MySQL, MSSQL, CSV files, Parquet files
+- **Multi-source support** — PostgreSQL, MySQL, MSSQL, and filesystem connections (CSV, Parquet, Avro)
 - **Reusable jobs** — configure source tables, target destination, filters, and migration mode once; run repeatedly
 - **Progress tracking** — per-table row counts, estimated progress bars, execution timestamps
 - **Execution history** — full log of all runs with status and error details
 - **Credential encryption** — database passwords encrypted at rest (Fernet)
 - **Connection testing** — validate credentials before running jobs
 - **Stop support** — cancel running jobs from the UI
+- **Job validation** — verify source tables exist and configuration is valid before running
+- **Auto-create target tables** — automatically create tables on the target database if they don't exist
+- **Retry with backoff** — transient database errors are retried automatically (1s, 3s, 10s)
+- **Graceful shutdown** — running migrations are given up to 30 seconds to complete on shutdown
+- **Deletion safety** — connections and jobs cannot be deleted while a job is actively running
+- **Dashboard** — aggregate stats, charts, and recent activity at a glance
 
 ## Architecture
 
@@ -29,14 +35,14 @@ A web-based data migration tool for moving data between databases and file forma
 
 **Docker (recommended):**
 ```bash
-git clone <repo-url>
+git clone git@github.com:smart-associates/sdf.git
 cd sdf
 ./start.sh docker
 ```
 
 **Local dev:**
 ```bash
-git clone <repo-url>
+git clone git@github.com:smart-associates/sdf.git
 cd sdf
 ./start.sh dev
 ```
@@ -109,7 +115,7 @@ Interactive API docs are available at [http://localhost:8000/docs](http://localh
 | PostgreSQL | `postgresql` | Yes | Yes | |
 | MySQL | `mysql` | Yes | Yes | |
 | MSSQL | `mssql` | Yes | Yes | |
-| Filesystem | `filesystem` | Yes | Yes | Set `staging_format` to `csv` or `parquet`; `database` is the directory path |
+| Filesystem | `filesystem` | Yes | Yes | Set `staging_format` to `csv`, `parquet`, or `avro`; `database` is the directory path |
 
 ## Migration Modes
 
