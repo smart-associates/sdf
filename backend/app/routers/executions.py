@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
 from app.database import get_db
-from app.models.job import JobExecution, JobExecutionTable
-from app.schemas.execution import JobExecutionResponse, JobExecutionTableResponse, ExecutionStatsResponse
+from app.models.job import JobExecution, JobExecutionTable, JobExecutionLog
+from app.schemas.execution import JobExecutionResponse, JobExecutionTableResponse, ExecutionStatsResponse, LogEntryResponse
 
 router = APIRouter(prefix="/api/executions", tags=["executions"])
 
@@ -74,6 +74,20 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
         total_records=stats.total_recs or 0,
         recent_executions=_build_responses(recent_execs, tables_map)
     )
+
+
+@router.get("/{exec_id}/logs", response_model=list[LogEntryResponse])
+async def get_execution_logs(
+    exec_id: int,
+    level: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    q = select(JobExecutionLog).where(JobExecutionLog.execution_id == exec_id)
+    if level == "info":
+        q = q.where(JobExecutionLog.level.in_(["info", "error"]))
+    q = q.order_by(JobExecutionLog.id.asc())
+    result = await db.execute(q)
+    return result.scalars().all()
 
 
 @router.get("/{exec_id}", response_model=JobExecutionResponse)

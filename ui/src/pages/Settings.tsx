@@ -61,6 +61,15 @@ export default function Settings() {
                   <option value="single">Single ( ' )</option>
                   <option value="double">Double ( " )</option>
                 </select>
+              ) : s.key === 'log_level' ? (
+                <select
+                  value={getValue(s)}
+                  onChange={e => setEdits(d => ({ ...d, [s.id]: e.target.value }))}
+                  className="border rounded-lg px-3 py-1.5 text-sm w-40"
+                >
+                  <option value="minimal">Minimal</option>
+                  <option value="detailed">Detailed</option>
+                </select>
               ) : s.data_type === 'boolean' ? (
                 <input
                   type="checkbox"

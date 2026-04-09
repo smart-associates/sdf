@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
@@ -28,6 +28,20 @@ class JobExecutionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class LogEntryResponse(BaseModel):
+    id: int
+    execution_id: int
+    exec_table_id: Optional[int] = None
+    level: str
+    event_type: str
+    message: str
+    metadata: Optional[dict] = Field(None, alias="meta")
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
 
 class ExecutionStatsResponse(BaseModel):
     total_runs: int

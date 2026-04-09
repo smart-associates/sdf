@@ -1,11 +1,50 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { getExecutions, Execution, ExecutionTable } from '../api/executions'
+import { getExecutions, getExecutionLogs, Execution, ExecutionTable, LogEntry } from '../api/executions'
 import { getJobs } from '../api/jobs'
 import StatusBadge from '../components/StatusBadge'
 import SortableHeader from '../components/SortableHeader'
 import { useSortableData } from '../hooks/useSortableData'
+
+function levelColor(level: string): string {
+  if (level === 'error') return 'text-red-600'
+  if (level === 'detail') return 'text-gray-400'
+  return 'text-gray-700'
+}
+
+function levelBadge(level: string): string {
+  if (level === 'error') return 'bg-red-100 text-red-700'
+  if (level === 'detail') return 'bg-gray-100 text-gray-500'
+  return 'bg-blue-100 text-blue-700'
+}
+
+function StepLog({ executionId, isRunning }: { executionId: number; isRunning: boolean }) {
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey: ['execution-logs', executionId],
+    queryFn: () => getExecutionLogs(executionId),
+    refetchInterval: isRunning ? 5_000 : false,
+  })
+
+  if (isLoading) return <div className="text-gray-400 text-xs py-2">Loading logs...</div>
+  if (logs.length === 0) return <div className="text-gray-400 text-xs py-2">No log entries</div>
+
+  return (
+    <div className="max-h-60 overflow-y-auto border rounded bg-gray-900 text-xs font-mono">
+      {logs.map((log: LogEntry) => (
+        <div key={log.id} className="flex gap-3 px-3 py-1 border-b border-gray-800 last:border-b-0">
+          <span className="text-gray-500 shrink-0 w-20">
+            {new Date(log.created_at).toLocaleTimeString()}
+          </span>
+          <span className={`shrink-0 w-12 text-center rounded px-1 ${levelBadge(log.level)}`}>
+            {log.level.toUpperCase()}
+          </span>
+          <span className={levelColor(log.level)}>{log.message}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function duration(e: Execution): string {
   if (!e.completed_at) return '—'
@@ -108,50 +147,56 @@ export default function Logs() {
                   <td className="px-4 py-3 text-gray-500">{duration(e)}</td>
                   <td className="px-4 py-3 text-gray-500">{new Date(e.started_at).toLocaleString()}</td>
                 </tr>
-                {expanded === e.id && e.tables.length > 0 && (
-                  <tr key={`${e.id}-tables`}>
-                    <td colSpan={7} className="px-8 py-2 bg-gray-50">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="text-gray-500">
-                            <th className="text-left py-1">Table</th>
-                            <th className="text-left py-1">Status</th>
-                            <th className="text-right py-1">Records</th>
-                            <th className="text-left py-1 pl-4 w-32">Progress</th>
-                            <th className="text-left py-1 pl-4">Error</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {e.tables.map((t: ExecutionTable) => {
-                            const pct = t.estimated_row_count && t.estimated_row_count > 0
-                              ? Math.min(100, Math.round(t.record_count / t.estimated_row_count * 100))
-                              : null
-                            return (
-                            <tr key={t.id} className="border-t border-gray-200">
-                              <td className="py-1 font-mono">{t.table_name}</td>
-                              <td className="py-1"><StatusBadge status={t.status} /></td>
-                              <td className="py-1 text-right whitespace-nowrap">
-                                {t.record_count.toLocaleString()}
-                                {t.estimated_row_count != null && t.status !== 'success' && (
-                                  <span className="text-gray-400"> / ~{t.estimated_row_count.toLocaleString()}</span>
-                                )}
-                              </td>
-                              <td className="py-1 pl-4 w-32">
-                                {t.status === 'running' && pct != null ? (
-                                  <div className="flex items-center gap-1">
-                                    <div className="flex-1 bg-gray-200 rounded-full h-1.5">
-                                      <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
-                                    </div>
-                                    <span className="text-gray-500 w-7 text-right">{pct}%</span>
-                                  </div>
-                                ) : null}
-                              </td>
-                              <td className="py-1 pl-4 text-red-500">{t.error_message || ''}</td>
+                {expanded === e.id && (
+                  <tr key={`${e.id}-details`}>
+                    <td colSpan={7} className="px-8 py-2 bg-gray-50 space-y-3">
+                      {e.tables.length > 0 && (
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-gray-500">
+                              <th className="text-left py-1">Table</th>
+                              <th className="text-left py-1">Status</th>
+                              <th className="text-right py-1">Records</th>
+                              <th className="text-left py-1 pl-4 w-32">Progress</th>
+                              <th className="text-left py-1 pl-4">Error</th>
                             </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {e.tables.map((t: ExecutionTable) => {
+                              const pct = t.estimated_row_count && t.estimated_row_count > 0
+                                ? Math.min(100, Math.round(t.record_count / t.estimated_row_count * 100))
+                                : null
+                              return (
+                              <tr key={t.id} className="border-t border-gray-200">
+                                <td className="py-1 font-mono">{t.table_name}</td>
+                                <td className="py-1"><StatusBadge status={t.status} /></td>
+                                <td className="py-1 text-right whitespace-nowrap">
+                                  {t.record_count.toLocaleString()}
+                                  {t.estimated_row_count != null && t.status !== 'success' && (
+                                    <span className="text-gray-400"> / ~{t.estimated_row_count.toLocaleString()}</span>
+                                  )}
+                                </td>
+                                <td className="py-1 pl-4 w-32">
+                                  {t.status === 'running' && pct != null ? (
+                                    <div className="flex items-center gap-1">
+                                      <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                                        <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                                      </div>
+                                      <span className="text-gray-500 w-7 text-right">{pct}%</span>
+                                    </div>
+                                  ) : null}
+                                </td>
+                                <td className="py-1 pl-4 text-red-500">{t.error_message || ''}</td>
+                              </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                      <div>
+                        <p className="text-xs font-medium text-gray-500 mb-1">Step Log</p>
+                        <StepLog executionId={e.id} isRunning={e.status === 'running'} />
+                      </div>
                     </td>
                   </tr>
                 )}

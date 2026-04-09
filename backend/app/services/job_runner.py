@@ -1,4 +1,6 @@
 """Async job execution service."""
+import json
+import time
 import threading
 import logging
 from datetime import datetime, timezone
@@ -129,6 +131,51 @@ def _update_exec_table_sync(exec_table_id: int, **kwargs):
         )
 
 
+class ExecutionLogger:
+    """Writes structured log entries to job_execution_logs."""
+
+    def __init__(self, execution_id: int, log_level: str):
+        self.execution_id = execution_id
+        self.log_level = log_level
+        self._last_detail_time: dict[int, float] = {}
+
+    def info(self, event_type: str, message: str, exec_table_id: int = None, **meta):
+        self._emit(exec_table_id, "info", event_type, message, meta)
+
+    def detail(self, event_type: str, message: str, exec_table_id: int = None, **meta):
+        if self.log_level != "detailed":
+            return
+        if event_type == "batch_inserted" and exec_table_id:
+            now = time.monotonic()
+            if now - self._last_detail_time.get(exec_table_id, 0) < 3:
+                return
+            self._last_detail_time[exec_table_id] = now
+        self._emit(exec_table_id, "detail", event_type, message, meta)
+
+    def error(self, event_type: str, message: str, exec_table_id: int = None, **meta):
+        self._emit(exec_table_id, "error", event_type, message, meta)
+
+    def _emit(self, exec_table_id, level, event_type, message, meta):
+        try:
+            with _sync_engine.begin() as conn:
+                conn.execute(
+                    text("""INSERT INTO job_execution_logs
+                           (execution_id, exec_table_id, level, event_type, message, metadata, created_at)
+                           VALUES (:eid, :etid, :level, :etype, :msg, :meta, :ts)"""),
+                    {
+                        "eid": self.execution_id,
+                        "etid": exec_table_id,
+                        "level": level,
+                        "etype": event_type,
+                        "msg": message,
+                        "meta": json.dumps(meta) if meta else None,
+                        "ts": _now_utc(),
+                    },
+                )
+        except Exception:
+            logger.debug("Failed to write execution log entry", exc_info=True)
+
+
 def _load_job_sync(job_id: int) -> dict:
     with _sync_engine.connect() as conn:
         job = conn.execute(text("SELECT * FROM jobs WHERE id = :id"), {"id": job_id}).fetchone()
@@ -157,6 +204,9 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         csv_quoting = _get_setting_sync("csv_quoting", "none").strip() or "none"
         csv_delimiter = _get_setting_sync("csv_delimiter", ",").strip() or ","
         csv_header = _get_setting_sync("csv_header", "true").strip() not in ("0", "false", "False")
+        log_level = _get_setting_sync("log_level", "minimal").strip() or "minimal"
+
+        elog = ExecutionLogger(execution_id, log_level)
 
         src_is_file = src["db_type"] == "filesystem"
         tgt_is_file = tgt["db_type"] == "filesystem"
@@ -178,6 +228,11 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         create_tgt = bool(job.get("create_target_table"))
         migration_mode = job.get("migration_mode") or "append"
         tgt_schema = job.get("target_schema") or None
+
+        elog.detail("settings_loaded", f"Settings: batch_size={batch_size}, mode={migration_mode}",
+                    batch_size=batch_size, migration_mode=migration_mode)
+        elog.info("job_started", f"Job '{job.get('name', '')}' started ({len(tables)} table{'s' if len(tables) != 1 else ''})",
+                  table_count=len(tables))
 
         total_records = 0
         any_failed = False
@@ -212,12 +267,21 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 estimated = None
 
             exec_table_id = _create_exec_table_sync(execution_id, table_entry, estimated)
+            table_start_mono = time.monotonic()
+
+            elog.info("table_started", f"{table_entry}: migration started",
+                      exec_table_id=exec_table_id, source_schema=src_schema, migration_mode=migration_mode)
+            if estimated is not None:
+                elog.detail("row_estimate", f"{table_entry}: ~{estimated:,} estimated rows",
+                            exec_table_id=exec_table_id, estimated=estimated)
 
             try:
                 # Auto-create target table only applies to DB targets
                 if create_tgt and not tgt_is_file:
                     if not table_exists(tgt_engine, tgt_table, tgt_schema):
                         create_target_table(src_engine, tgt_engine, src_table, tgt_table, src_schema, tgt_schema)
+                        elog.info("table_created", f"{table_entry}: target table created",
+                                  exec_table_id=exec_table_id)
 
                 src_type = src["db_type"]
                 tgt_type = tgt["db_type"]
@@ -227,6 +291,8 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                         raise _StopRequested()
                     _update_exec_table_sync(exec_table_id, record_count=n)
                     _update_execution_sync(execution_id, record_count=total_records + n)
+                    elog.detail("batch_inserted", f"{table_entry}: {n:,} rows so far",
+                                exec_table_id=exec_table_id, rows=n)
 
                 if src_type == "filesystem" and tgt_type == "filesystem":
                     src_fmt = src.get("staging_format") or "parquet"
@@ -265,6 +331,11 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                     )
 
                 total_records += count
+                duration_ms = int((time.monotonic() - table_start_mono) * 1000)
+                duration_s = duration_ms / 1000
+                elog.info("table_completed",
+                          f"{table_entry}: {count:,} rows in {duration_s:.1f}s",
+                          exec_table_id=exec_table_id, rows=count, duration_ms=duration_ms)
                 _update_exec_table_sync(
                     exec_table_id,
                     status="success",
@@ -272,6 +343,8 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                     record_count=count
                 )
             except _StopRequested:
+                elog.info("table_cancelled", f"{table_entry}: cancelled by user",
+                          exec_table_id=exec_table_id)
                 _update_exec_table_sync(
                     exec_table_id,
                     status="cancelled",
@@ -281,6 +354,8 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 break
             except Exception as e:
                 logger.error(f"Table {table_entry} failed: {e}")
+                elog.error("table_failed", f"{table_entry}: {str(e)[:500]}",
+                           exec_table_id=exec_table_id, error=str(e)[:1000])
                 _update_exec_table_sync(
                     exec_table_id,
                     status="failed",
@@ -290,15 +365,23 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 any_failed = True
                 # Continue processing remaining tables instead of aborting
 
+        tables_total = len(tables)
+
         if stopped:
             final_status = "cancelled"
             final_error = "Execution stopped by user"
+            elog.info("job_cancelled", "Job cancelled by user")
         elif any_failed:
             final_status = "failed"
             final_error = "One or more tables failed — see table details"
+            elog.error("job_failed", f"Job failed: see table details ({total_records:,} rows migrated)",
+                       total_rows=total_records, tables_total=tables_total)
         else:
             final_status = "success"
             final_error = None
+            elog.info("job_completed",
+                      f"Job finished: {tables_total}/{tables_total} tables, {total_records:,} rows",
+                      total_rows=total_records, tables_ok=tables_total, tables_total=tables_total)
         _update_execution_sync(
             execution_id,
             status=final_status,
@@ -308,6 +391,11 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         )
     except Exception as e:
         logger.error(f"Job {job_id} execution {execution_id} failed: {e}")
+        try:
+            ExecutionLogger(execution_id, "minimal").error(
+                "job_failed", f"Job failed: {str(e)[:500]}", error=str(e)[:1000])
+        except Exception:
+            pass
         _update_execution_sync(
             execution_id,
             status="failed",

@@ -32,6 +32,20 @@ export interface ExecutionStats {
   recent_executions: Execution[]
 }
 
+export interface LogEntry {
+  id: number
+  execution_id: number
+  exec_table_id?: number
+  level: string
+  event_type: string
+  message: string
+  metadata?: Record<string, unknown>
+  created_at: string
+}
+
+export const getExecutionLogs = (execId: number) =>
+  client.get<LogEntry[]>(`/executions/${execId}/logs`).then(r => r.data)
+
 export const getStats = () =>
   client.get<ExecutionStats>('/executions/stats').then(r => r.data)
 

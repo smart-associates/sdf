@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Boolean, JSON
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -40,3 +40,15 @@ class JobExecutionTable(Base):
     record_count = Column(Integer, default=0)
     estimated_row_count = Column(Integer)  # stats-based estimate, may be None
     error_message = Column(Text)
+
+class JobExecutionLog(Base):
+    __tablename__ = "job_execution_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    execution_id = Column(Integer, ForeignKey("job_executions.id"), nullable=False, index=True)
+    exec_table_id = Column(Integer, ForeignKey("job_execution_tables.id"), index=True)
+    level = Column(String(20), nullable=False)        # info, detail, error
+    event_type = Column(String(50), nullable=False)    # job_started, table_completed, etc.
+    message = Column(Text, nullable=False)
+    meta = Column("metadata", JSON)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

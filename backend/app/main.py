@@ -41,6 +41,18 @@ async def run_migrations():
         "ALTER TABLE job_executions ALTER COLUMN completed_at TYPE TIMESTAMPTZ USING completed_at::timestamptz",
         "ALTER TABLE job_execution_tables ALTER COLUMN started_at TYPE TIMESTAMPTZ USING started_at::timestamptz",
         "ALTER TABLE job_execution_tables ALTER COLUMN completed_at TYPE TIMESTAMPTZ USING completed_at::timestamptz",
+        """CREATE TABLE IF NOT EXISTS job_execution_logs (
+               id SERIAL PRIMARY KEY,
+               execution_id INTEGER NOT NULL REFERENCES job_executions(id),
+               exec_table_id INTEGER REFERENCES job_execution_tables(id),
+               level VARCHAR(20) NOT NULL,
+               event_type VARCHAR(50) NOT NULL,
+               message TEXT NOT NULL,
+               metadata JSONB,
+               created_at TIMESTAMPTZ DEFAULT now()
+           )""",
+        "CREATE INDEX IF NOT EXISTS ix_job_execution_logs_execution_id ON job_execution_logs (execution_id)",
+        "CREATE INDEX IF NOT EXISTS ix_job_execution_logs_exec_table_id ON job_execution_logs (exec_table_id)",
     ]
     for stmt in migrations:
         try:
@@ -89,6 +101,7 @@ async def seed_defaults():
         ("csv_quoting", "none", "Quote character for CSV export: none (backslash escape), single, or double", "string"),
         ("csv_delimiter", ",", "Field delimiter for CSV output. Use escape sequences for control characters: \\t (tab), \\001 (SOH), etc.", "string"),
         ("csv_header", "true", "Include column headers in CSV export", "boolean"),
+        ("log_level", "minimal", "Logging verbosity for job executions: minimal (key events only) or detailed (includes batch progress)", "string"),
     ]
     async with AsyncSessionLocal() as db:
         for key, value, desc, dtype in defaults:
