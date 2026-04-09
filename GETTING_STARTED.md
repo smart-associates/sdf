@@ -63,6 +63,36 @@ When `backend/.env` contains `DATABASE_URL`, auto-detection is skipped.
 
 Open [http://localhost:5173](http://localhost:5173). Press `Ctrl+C` to stop both services.
 
+---
+
+## Running Tests
+
+### Backend (pytest)
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m pytest -v
+```
+
+Database detection mirrors `start.sh`: tests use PostgreSQL if a `backend/.env` file exists or if `pg_isready` succeeds, otherwise they use in-memory SQLite. Tests clean up after themselves so your development database is not affected.
+
+### Frontend (Vitest)
+
+```bash
+cd ui
+npx vitest run
+```
+
+Or run in watch mode during development:
+
+```bash
+cd ui
+npx vitest
+```
+
+---
+
 <details>
 <summary>Manual start (without start.sh)</summary>
 
