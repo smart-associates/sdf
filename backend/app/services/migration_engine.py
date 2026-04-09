@@ -100,6 +100,8 @@ def _sanitize_exc(fn):
             return fn(*args, **kwargs)
         except Exception as e:
             msg = str(e).replace("\x00", "")
+            if not msg:
+                msg = f"{type(e).__name__} (no message — original contained only NUL bytes)"
             raise Exception(msg) from None
     return wrapper
 
