@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import { getSettings, updateSetting, Setting } from '../api/settings'
@@ -7,6 +7,12 @@ export default function Settings() {
   const qc = useQueryClient()
   const [edits, setEdits] = useState<Record<number, string>>({})
   const [saved, setSaved] = useState<Record<number, boolean>>({})
+  const timersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
+
+  useEffect(() => {
+    const timers = timersRef.current
+    return () => { Object.values(timers).forEach(clearTimeout) }
+  }, [])
 
   const { data: settings = [], isLoading } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
 
@@ -18,7 +24,8 @@ export default function Settings() {
       qc.invalidateQueries({ queryKey: ['settings'] })
       setSaveError(s => ({ ...s, [vars.id]: '' }))
       setSaved(s => ({ ...s, [vars.id]: true }))
-      setTimeout(() => setSaved(s => ({ ...s, [vars.id]: false })), 2000)
+      clearTimeout(timersRef.current[vars.id])
+      timersRef.current[vars.id] = setTimeout(() => setSaved(s => ({ ...s, [vars.id]: false })), 2000)
     },
     onError: (e: any, vars) => {
       setSaveError(s => ({ ...s, [vars.id]: e.response?.data?.detail || 'Save failed' }))
