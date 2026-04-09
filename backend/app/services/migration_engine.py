@@ -692,6 +692,57 @@ def get_avro_estimated_row_count(directory: str, table: str) -> Optional[int]:
         return None
 
 
+def _sa_type_to_avro(sa_type) -> list:
+    """Map a SQLAlchemy column type to an Avro type (nullable union)."""
+    from sqlalchemy import types as sa_types
+    if isinstance(sa_type, sa_types.Boolean):
+        return ["null", "boolean"]
+    if isinstance(sa_type, sa_types.BigInteger):
+        return ["null", "long"]
+    if isinstance(sa_type, (sa_types.SmallInteger, sa_types.Integer)):
+        return ["null", "int"]
+    if isinstance(sa_type, sa_types.Float):
+        return ["null", "double"]
+    if isinstance(sa_type, sa_types.Numeric):
+        p = sa_type.precision or 18
+        s = sa_type.scale or 4
+        return ["null", {"type": "bytes", "logicalType": "decimal",
+                         "precision": p, "scale": s}]
+    if isinstance(sa_type, sa_types.DateTime):
+        return ["null", {"type": "long", "logicalType": "timestamp-micros"}]
+    if isinstance(sa_type, sa_types.Date):
+        return ["null", {"type": "int", "logicalType": "date"}]
+    return ["null", "string"]
+
+
+def _sa_columns_to_avro_schema(columns, table: str) -> dict:
+    """Build an Avro schema from reflected SQLAlchemy Column objects."""
+    fields = [{"name": col.name, "type": _sa_type_to_avro(col.type)} for col in columns]
+    return {"type": "record", "name": table, "fields": fields}
+
+
+def _reflect_source_columns(
+    src_engine: Engine, src_table: str, src_schema: Optional[str],
+    col_names: list[str],
+) -> Optional[list]:
+    """Reflect source columns, returning them in col_names order.
+
+    Returns None if reflection fails (caller should fall back to runtime inference).
+    """
+    try:
+        tbl = reflect_table(src_engine, src_table, src_schema)
+        by_name = {c.name.lower(): c for c in tbl.columns}
+        result = []
+        for cn in col_names:
+            col = by_name.get(cn.lower())
+            if col is None:
+                return None
+            result.append(col)
+        return result
+    except Exception:
+        return None
+
+
 def _infer_avro_schema(rows: list[dict], cols: list[str], table: str) -> dict:
     """Infer an Avro schema from the first row, falling back to string for unknowns."""
     import datetime as dt
@@ -715,12 +766,17 @@ def _infer_avro_schema(rows: list[dict], cols: list[str], table: str) -> dict:
     return {"type": "record", "name": table, "fields": fields}
 
 
-def _row_to_avro(row: dict) -> dict:
-    """Convert a row dict to Avro-compatible values (datetimes to ISO strings)."""
+def _row_to_avro(row: dict, native_types: bool = False) -> dict:
+    """Convert a row dict to Avro-compatible values.
+
+    When *native_types* is True, date/datetime objects are kept as-is so
+    fastavro can serialise them using Avro logicalTypes.  When False
+    (the default / fallback path), they are converted to ISO-8601 strings.
+    """
     out = {}
     for k, v in row.items():
         if hasattr(v, "isoformat"):
-            out[k] = v.isoformat()
+            out[k] = v if native_types else v.isoformat()
         elif v is None:
             out[k] = None
         else:
@@ -801,6 +857,7 @@ def migrate_db_to_avro(
     with src_engine.connect() as src_conn:
         result = src_conn.execution_options(stream_results=True).execute(text(query))
         cols = list(result.keys())
+        sa_columns = _reflect_source_columns(src_engine, src_table, src_schema, cols)
 
         # Collect first batch to infer schema
         batch: list[dict] = []
@@ -811,7 +868,8 @@ def migrate_db_to_avro(
 
         if not batch:
             # Empty result: write an empty Avro file with string-only schema
-            schema = _infer_avro_schema([], cols, tgt_table)
+            schema = (_sa_columns_to_avro_schema(sa_columns, tgt_table)
+                      if sa_columns else _infer_avro_schema([], cols, tgt_table))
             parsed_schema = fastavro.parse_schema(schema)
             with open(path, "wb") as f:
                 fastavro.writer(f, parsed_schema, [])
@@ -819,8 +877,10 @@ def migrate_db_to_avro(
                 progress_cb(0)
             return 0
 
-        schema = _infer_avro_schema(batch, cols, tgt_table)
+        schema = (_sa_columns_to_avro_schema(sa_columns, tgt_table)
+                  if sa_columns else _infer_avro_schema(batch, cols, tgt_table))
         parsed_schema = fastavro.parse_schema(schema)
+        _native = bool(sa_columns)
 
         if migration_mode == "append" and os.path.isfile(path):
             # Read existing records, then rewrite with new data appended
@@ -831,10 +891,10 @@ def migrate_db_to_avro(
                     existing_records.append(rec)
             total += len(existing_records)
             with open(path, "wb") as f:
-                fastavro.writer(f, parsed_schema, existing_records + [_row_to_avro(r) for r in batch])
+                fastavro.writer(f, parsed_schema, existing_records + [_row_to_avro(r, native_types=_native) for r in batch])
         else:
             with open(path, "wb") as f:
-                fastavro.writer(f, parsed_schema, [_row_to_avro(r) for r in batch])
+                fastavro.writer(f, parsed_schema, [_row_to_avro(r, native_types=_native) for r in batch])
 
         total += len(batch)
         if progress_cb:
@@ -843,7 +903,7 @@ def migrate_db_to_avro(
         # Continue with remaining rows - read all, then rewrite
         remaining: list[dict] = []
         for row in result:
-            remaining.append(_row_to_avro(dict(zip(cols, row))))
+            remaining.append(_row_to_avro(dict(zip(cols, row)), native_types=_native))
             if len(remaining) >= 10000:
                 # Append batch to existing file
                 existing_records = []
