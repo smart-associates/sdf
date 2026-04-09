@@ -20,17 +20,35 @@ if _dotenv.exists():
             _sync_db_url = line.split("=", 1)[1]
 
 if _db_url:
-    print(f"Tests using PostgreSQL from .env: {_db_url}")
+    pass  # got URLs from .env
 elif shutil.which("pg_isready") and subprocess.run(
     ["pg_isready", "-q"], capture_output=True
 ).returncode == 0:
     _db_url = "postgresql+asyncpg:///sdf?host=/var/run/postgresql"
     _sync_db_url = "postgresql+psycopg2:///sdf?host=/var/run/postgresql"
-    print(f"PostgreSQL detected via pg_isready — tests using: {_db_url}")
 else:
     _db_url = "sqlite+aiosqlite://"
     _sync_db_url = "sqlite:///"
-    print("No .env and PostgreSQL not running — tests using in-memory SQLite")
+
+# Use a separate test database so dev data is never touched
+if "postgresql" in _db_url:
+    import re
+    _db_url = re.sub(r"/sdf(\b)", r"/sdf_test\1", _db_url)
+    _sync_db_url = re.sub(r"/sdf(\b)", r"/sdf_test\1", _sync_db_url)
+    # Auto-create sdf_test if it doesn't exist (mirrors start.sh for sdf)
+    if shutil.which("psql"):
+        result = subprocess.run(
+            ["psql", "-h", "/var/run/postgresql", "-lqt"],
+            capture_output=True, text=True
+        )
+        if "sdf_test" not in result.stdout:
+            subprocess.run(
+                ["createdb", "-h", "/var/run/postgresql", "sdf_test"],
+                capture_output=True
+            )
+    print(f"Tests using PostgreSQL: {_db_url}")
+else:
+    print("Tests using in-memory SQLite")
 
 os.environ.setdefault("DATABASE_URL", _db_url)
 os.environ.setdefault("SYNC_DATABASE_URL", _sync_db_url or "sqlite:///")

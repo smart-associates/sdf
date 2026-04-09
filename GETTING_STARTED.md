@@ -75,7 +75,7 @@ source .venv/bin/activate
 python -m pytest -v
 ```
 
-Database detection mirrors `start.sh`: tests use PostgreSQL if a `backend/.env` file exists or if `pg_isready` succeeds, otherwise they use in-memory SQLite. Tests clean up after themselves so your development database is not affected.
+Database detection mirrors `start.sh`: tests use PostgreSQL if a `backend/.env` file exists or if `pg_isready` succeeds, otherwise they use in-memory SQLite. When PostgreSQL is used, tests run against a separate `sdf_test` database (auto-created if needed) so your development data is never affected.
 
 ### Frontend (Vitest)
 
