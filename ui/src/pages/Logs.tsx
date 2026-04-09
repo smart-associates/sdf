@@ -16,10 +16,11 @@ function duration(e: Execution): string {
 export default function Logs() {
   const [expanded, setExpanded] = useState<number | null>(null)
   const [filterJob, setFilterJob] = useState<number | ''>('')
+  const [filterDays, setFilterDays] = useState<number | ''>(7)
 
   const { data: executions = [], isLoading } = useQuery({
-    queryKey: ['executions', filterJob],
-    queryFn: () => getExecutions(filterJob ? +filterJob : undefined, 100),
+    queryKey: ['executions', filterJob, filterDays],
+    queryFn: () => getExecutions(filterJob ? +filterJob : undefined, 100, filterDays ? +filterDays : undefined),
     refetchInterval: 15_000,
   })
 
@@ -51,14 +52,27 @@ export default function Logs() {
           <h1 className="text-2xl font-bold">Execution Logs</h1>
           <p className="text-gray-500 text-sm mt-1">History of all migration runs</p>
         </div>
-        <select
-          className="border rounded-lg px-3 py-2 text-sm"
-          value={filterJob}
-          onChange={e => setFilterJob(e.target.value ? +e.target.value : '')}
-        >
-          <option value="">All Jobs</option>
-          {jobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
-        </select>
+        <div className="flex gap-2">
+          <select
+            className="border rounded-lg px-3 py-2 text-sm"
+            value={filterDays}
+            onChange={e => setFilterDays(e.target.value ? +e.target.value : '')}
+          >
+            <option value="">All Time</option>
+            <option value="1">Last 1 Day</option>
+            <option value="7">Last 7 Days</option>
+            <option value="30">Last 30 Days</option>
+            <option value="90">Last 90 Days</option>
+          </select>
+          <select
+            className="border rounded-lg px-3 py-2 text-sm"
+            value={filterJob}
+            onChange={e => setFilterJob(e.target.value ? +e.target.value : '')}
+          >
+            <option value="">All Jobs</option>
+            {jobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border">
