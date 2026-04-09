@@ -146,8 +146,9 @@ def to_generic_type(col_type) -> sa.types.TypeEngine:
 
 
 def get_table_names(engine: Engine, schema: Optional[str] = None) -> list[str]:
-    insp = inspect(engine)
-    return insp.get_table_names(schema=schema)
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        insp = inspect(conn)
+        return insp.get_table_names(schema=schema)
 
 
 def get_estimated_row_count(
@@ -166,7 +167,7 @@ def get_estimated_row_count(
     """
     dialect = engine.dialect.name
     try:
-        with engine.connect() as conn:
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
             if dialect == "postgresql":
                 if schema:
                     row = conn.execute(
@@ -249,7 +250,8 @@ def get_parquet_estimated_row_count(directory: str, table: str) -> Optional[int]
 
 def reflect_table(engine: Engine, table_name: str, schema: Optional[str] = None) -> Table:
     meta = MetaData()
-    return Table(table_name, meta, autoload_with=engine, schema=schema)
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        return Table(table_name, meta, autoload_with=conn, schema=schema)
 
 
 @_sanitize_exc
@@ -267,8 +269,9 @@ def create_target_table(src_engine: Engine, tgt_engine: Engine,
 
 
 def table_exists(engine: Engine, table_name: str, schema: Optional[str] = None) -> bool:
-    insp = inspect(engine)
-    return insp.has_table(table_name, schema=schema)
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        insp = inspect(conn)
+        return insp.has_table(table_name, schema=schema)
 
 
 @_sanitize_exc
