@@ -1,5 +1,5 @@
 from pydantic import BaseModel, validator
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 class JobBase(BaseModel):
@@ -10,7 +10,7 @@ class JobBase(BaseModel):
     target_connection_id: int
     target_schema: Optional[str] = None
     create_target_table: bool = False
-    migration_mode: str = "append"  # append|truncate_load
+    migration_mode: Literal["append", "truncate_load"] = "append"
 
     @validator("source_tables")
     def source_tables_not_blank(cls, v):

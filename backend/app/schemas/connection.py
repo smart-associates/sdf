@@ -1,10 +1,10 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 class DatabaseConnectionBase(BaseModel):
     name: str
-    db_type: str  # postgresql|mysql|mssql|filesystem
+    db_type: Literal["postgresql", "mysql", "mssql", "filesystem"]
     host: Optional[str] = None
     port: Optional[int] = None
     database: str  # for filesystem: directory path
