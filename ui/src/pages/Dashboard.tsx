@@ -108,7 +108,7 @@ export default function Dashboard() {
                 <div className="flex-1 bg-gray-100 rounded-full h-2">
                   <div
                     className="bg-blue-500 h-2 rounded-full"
-                    style={{ width: `${(count / connections.length) * 100}%` }}
+                    style={{ width: `${connections.length ? (count / connections.length) * 100 : 0}%` }}
                   />
                 </div>
                 <span className="text-xs font-medium">{count}</span>
