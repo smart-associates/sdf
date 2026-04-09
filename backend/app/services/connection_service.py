@@ -148,16 +148,15 @@ async def test_connection(db: AsyncSession, conn_id: int) -> dict:
             return {"success": False, "message": "Directory not accessible", "tested_at": tested_at, "error": error_msg}
 
     plaintext_pw = decrypt(conn.password) if conn.password else ""
+    port = conn.port or DEFAULT_PORTS.get(conn.db_type, 5432)
+    url = URL.create(_DRIVERS[conn.db_type], username=conn.username,
+                     password=plaintext_pw, host=conn.host,
+                     port=port, database=conn.database)
+    connect_args = {"connect_timeout": 10} if conn.db_type == "postgresql" else {}
+    engine = sa.create_engine(url, connect_args=connect_args)
     try:
-        port = conn.port or DEFAULT_PORTS.get(conn.db_type, 5432)
-        url = URL.create(_DRIVERS[conn.db_type], username=conn.username,
-                         password=plaintext_pw, host=conn.host,
-                         port=port, database=conn.database)
-        connect_args = {"connect_timeout": 10} if conn.db_type == "postgresql" else {}
-        engine = sa.create_engine(url, connect_args=connect_args)
         with engine.connect() as c:
             c.execute(sa.text("SELECT 1"))
-        engine.dispose()
         conn.last_test_status = "success"
         conn.last_tested_at = tested_at
         conn.last_test_error = None
@@ -170,3 +169,5 @@ async def test_connection(db: AsyncSession, conn_id: int) -> dict:
         conn.last_test_error = error_msg
         await db.commit()
         return {"success": False, "message": "Connection failed", "tested_at": tested_at, "error": error_msg}
+    finally:
+        engine.dispose()
