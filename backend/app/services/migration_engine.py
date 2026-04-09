@@ -5,7 +5,7 @@ import re
 import time
 import sqlalchemy as sa
 from sqlalchemy import inspect, text, MetaData, Table, Column
-from sqlalchemy import String, Text, Integer, BigInteger, Float, Numeric, Boolean, Date, DateTime
+from sqlalchemy import String, Text, Integer, BigInteger, Float, Double, Numeric, Boolean, Date, DateTime
 from sqlalchemy.engine import Engine, URL
 from sqlalchemy.exc import OperationalError, DBAPIError
 from typing import Callable, Optional
@@ -123,7 +123,9 @@ def to_generic_type(col_type) -> sa.types.TypeEngine:
         return Integer()
     if "BOOL" in type_str or "BIT" in type_str:
         return Boolean()
-    if "DOUBLE" in type_str or "FLOAT" in type_str or "REAL" in type_str:
+    if "DOUBLE" in type_str or "FLOAT" in type_str:
+        return Double()
+    if "REAL" in type_str:
         return Float()
     if "NUMERIC" in type_str or "DECIMAL" in type_str or "MONEY" in type_str:
         p = getattr(col_type, "precision", 18)
