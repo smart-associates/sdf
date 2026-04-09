@@ -200,16 +200,6 @@ async def execute_job(job_id: int, db: AsyncSession = Depends(get_db)):
     if not tables:
         raise HTTPException(400, "Job has no source tables defined")
 
-    # Prevent duplicate concurrent executions of the same job
-    running = await db.execute(
-        select(JobExecution).where(
-            JobExecution.job_id == job_id,
-            JobExecution.status == "running"
-        )
-    )
-    if running.scalar_one_or_none():
-        raise HTTPException(409, "Job is already running")
-
     try:
         execution = await start_job_execution(db, job_id)
     except IntegrityError:
