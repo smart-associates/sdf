@@ -4,7 +4,7 @@ from datetime import datetime
 
 class DatabaseConnectionBase(BaseModel):
     name: str
-    db_type: Literal["postgresql", "mysql", "mssql", "filesystem"]
+    db_type: str
     host: Optional[str] = None
     port: Optional[int] = None
     database: str  # for filesystem: directory path
@@ -12,9 +12,11 @@ class DatabaseConnectionBase(BaseModel):
     staging_format: Optional[str] = None  # csv|parquet (filesystem connections only)
 
 class DatabaseConnectionCreate(DatabaseConnectionBase):
+    db_type: Literal["postgresql", "mysql", "mssql", "filesystem"]
     password: Optional[str] = None
 
 class DatabaseConnectionUpdate(DatabaseConnectionBase):
+    db_type: Literal["postgresql", "mysql", "mssql", "filesystem"]
     password: Optional[str] = None
 
 class DatabaseConnectionResponse(DatabaseConnectionBase):
