@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Edit2, Play, CheckCircle, Square } from 'lucide-react'
 import { getJobs, createJob, updateJob, deleteJob, validateJob, executeJob, Job } from '../api/jobs'
@@ -6,6 +6,8 @@ import { getConnections } from '../api/connections'
 import { getExecution, stopExecution } from '../api/executions'
 import StatusBadge from '../components/StatusBadge'
 import Modal from '../components/Modal'
+import SortableHeader from '../components/SortableHeader'
+import { useSortableData } from '../hooks/useSortableData'
 
 const MIGRATION_MODES = ['append', 'truncate_load'] as const
 
@@ -96,6 +98,15 @@ export default function Jobs() {
 
   const connName = (id: number) => connections.find(c => c.id === id)?.name || `#${id}`
 
+  const jobKeyExtractors = useMemo(() => ({
+    source: (j: Job) => connName(j.source_connection_id),
+    target: (j: Job) => connName(j.target_connection_id),
+  }), [connections])
+
+  const { sortedData: sortedJobs, sortKey, sortDirection, onSort } = useSortableData<Job, string>(
+    jobs, 'name', 'asc', jobKeyExtractors
+  )
+
   if (isLoading) return <div className="text-gray-400 text-sm">Loading...</div>
 
   return (
@@ -114,15 +125,15 @@ export default function Jobs() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Source</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Target</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Mode</th>
+              <SortableHeader label="Name" sortKey="name" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Source" sortKey="source" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Target" sortKey="target" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Mode" sortKey="migration_mode" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {jobs.map(j => (
+            {sortedJobs.map(j => (
               <tr key={j.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium">{j.name}</td>
                 <td className="px-4 py-3 text-gray-600">{connName(j.source_connection_id)}</td>

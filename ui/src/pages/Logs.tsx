@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { getExecutions, Execution } from '../api/executions'
+import { getExecutions, Execution, ExecutionTable } from '../api/executions'
 import { getJobs } from '../api/jobs'
 import StatusBadge from '../components/StatusBadge'
+import SortableHeader from '../components/SortableHeader'
+import { useSortableData } from '../hooks/useSortableData'
 
 function duration(e: Execution): string {
   if (!e.completed_at) return '—'
@@ -24,6 +26,21 @@ export default function Logs() {
   const { data: jobs = [] } = useQuery({ queryKey: ['jobs'], queryFn: getJobs })
 
   const jobName = (id: number) => jobs.find(j => j.id === id)?.name || `Job #${id}`
+
+  const durationMs = (e: Execution): number => {
+    if (!e.completed_at) return -1
+    return new Date(e.completed_at).getTime() - new Date(e.started_at).getTime()
+  }
+
+  const logKeyExtractors = useMemo(() => ({
+    job: (e: Execution) => jobName(e.job_id),
+    record_count: (e: Execution) => e.record_count || 0,
+    duration: (e: Execution) => durationMs(e),
+  }), [jobs])
+
+  const { sortedData: sortedExecutions, sortKey, sortDirection, onSort } = useSortableData<Execution, string>(
+    executions, 'id', 'desc', logKeyExtractors
+  )
 
   if (isLoading) return <div className="text-gray-400 text-sm">Loading...</div>
 
@@ -49,16 +66,16 @@ export default function Logs() {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 w-6" />
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">ID</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Job</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Records</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Duration</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Started</th>
+              <SortableHeader label="ID" sortKey="id" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Job" sortKey="job" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Status" sortKey="status" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Records" sortKey="record_count" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Duration" sortKey="duration" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Started" sortKey="started_at" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
             </tr>
           </thead>
           <tbody className="divide-y">
-            {executions.map(e => (
+            {sortedExecutions.map(e => (
               <>
                 <tr
                   key={e.id}
@@ -89,7 +106,7 @@ export default function Logs() {
                           </tr>
                         </thead>
                         <tbody>
-                          {e.tables.map(t => {
+                          {e.tables.map((t: ExecutionTable) => {
                             const pct = t.estimated_row_count && t.estimated_row_count > 0
                               ? Math.min(100, Math.round(t.record_count / t.estimated_row_count * 100))
                               : null

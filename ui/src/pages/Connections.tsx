@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Edit2, Plug } from 'lucide-react'
 import {
@@ -7,6 +7,8 @@ import {
 } from '../api/connections'
 import StatusBadge from '../components/StatusBadge'
 import Modal from '../components/Modal'
+import SortableHeader from '../components/SortableHeader'
+import { useSortableData } from '../hooks/useSortableData'
 
 const DB_TYPES = ['postgresql', 'mysql', 'mssql', 'filesystem'] as const
 const DEFAULT_PORTS: Record<string, number> = { postgresql: 5432, mysql: 3306, mssql: 1433 }
@@ -23,6 +25,10 @@ export default function Connections() {
   const [error, setError] = useState('')
 
   const { data: connections = [], isLoading } = useQuery({ queryKey: ['connections'], queryFn: getConnections })
+
+  const { sortedData: sortedConnections, sortKey, sortDirection, onSort } = useSortableData<DatabaseConnection, string>(
+    connections, 'name', 'asc'
+  )
 
   const createMut = useMutation({
     mutationFn: (d: Omit<DatabaseConnection, 'id'>) => createConnection(d),
@@ -84,16 +90,16 @@ export default function Connections() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Host</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Database</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+              <SortableHeader label="Name" sortKey="name" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Type" sortKey="db_type" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Host" sortKey="host" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Database" sortKey="database" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+              <SortableHeader label="Status" sortKey="last_test_status" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {connections.map(c => (
+            {sortedConnections.map(c => (
               <tr key={c.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium">{c.name}</td>
                 <td className="px-4 py-3 uppercase text-xs text-gray-500">{c.db_type === 'mssql' ? 'MS SQL' : c.db_type === 'filesystem' ? `Filesystem (${c.staging_format || 'parquet'})` : c.db_type}</td>
