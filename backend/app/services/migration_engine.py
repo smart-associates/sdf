@@ -882,53 +882,49 @@ def migrate_db_to_avro(
         parsed_schema = fastavro.parse_schema(schema)
         _native = bool(sa_columns)
 
-        if migration_mode == "append" and os.path.isfile(path):
-            # Read existing records, then rewrite with new data appended
-            existing_records = []
-            with open(path, "rb") as f:
-                reader = fastavro.reader(f)
-                for rec in reader:
-                    existing_records.append(rec)
-            total += len(existing_records)
-            with open(path, "wb") as f:
-                fastavro.writer(f, parsed_schema, existing_records + [_row_to_avro(r, native_types=_native) for r in batch])
-        else:
-            with open(path, "wb") as f:
-                fastavro.writer(f, parsed_schema, [_row_to_avro(r, native_types=_native) for r in batch])
+        # Write to a temp file, then replace the target atomically
+        tmp_path = path + ".tmp"
+        try:
+            with open(tmp_path, "wb") as f:
+                writer = fastavro.write.Writer(f, parsed_schema)
 
-        total += len(batch)
-        if progress_cb:
-            progress_cb(total)
+                # If appending, copy existing records first
+                if migration_mode == "append" and os.path.isfile(path):
+                    with open(path, "rb") as existing_f:
+                        reader = fastavro.reader(existing_f)
+                        for rec in reader:
+                            writer.write(rec)
+                            total += 1
 
-        # Continue with remaining rows - read all, then rewrite
-        remaining: list[dict] = []
-        for row in result:
-            remaining.append(_row_to_avro(dict(zip(cols, row)), native_types=_native))
-            if len(remaining) >= 10000:
-                # Append batch to existing file
-                existing_records = []
-                with open(path, "rb") as f:
-                    reader = fastavro.reader(f)
-                    for rec in reader:
-                        existing_records.append(rec)
-                with open(path, "wb") as f:
-                    fastavro.writer(f, parsed_schema, existing_records + remaining)
-                total += len(remaining)
+                # Write first batch
+                for r in batch:
+                    writer.write(_row_to_avro(r, native_types=_native))
+                total += len(batch)
                 if progress_cb:
                     progress_cb(total)
-                remaining = []
 
-        if remaining:
-            existing_records = []
-            with open(path, "rb") as f:
-                reader = fastavro.reader(f)
-                for rec in reader:
-                    existing_records.append(rec)
-            with open(path, "wb") as f:
-                fastavro.writer(f, parsed_schema, existing_records + remaining)
-            total += len(remaining)
+                # Stream remaining rows directly to writer
+                batch_count = 0
+                for row in result:
+                    writer.write(_row_to_avro(dict(zip(cols, row)), native_types=_native))
+                    total += 1
+                    batch_count += 1
+                    if batch_count >= 10000:
+                        if progress_cb:
+                            progress_cb(total)
+                        batch_count = 0
+
+                writer.flush()
+
+            # Atomic replace
+            os.replace(tmp_path, path)
+
             if progress_cb:
                 progress_cb(total)
+        except BaseException:
+            if os.path.isfile(tmp_path):
+                os.remove(tmp_path)
+            raise
 
     return total
 
