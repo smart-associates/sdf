@@ -14,13 +14,15 @@ function duration(e: Execution): string {
 }
 
 export default function Logs() {
+  const PAGE_SIZE = 50
   const [expanded, setExpanded] = useState<number | null>(null)
   const [filterJob, setFilterJob] = useState<number | ''>('')
   const [filterDays, setFilterDays] = useState<number | ''>(7)
+  const [page, setPage] = useState(0)
 
   const { data: executions = [], isLoading } = useQuery({
-    queryKey: ['executions', filterJob, filterDays],
-    queryFn: () => getExecutions(filterJob ? +filterJob : undefined, 100, filterDays ? +filterDays : undefined),
+    queryKey: ['executions', filterJob, filterDays, page],
+    queryFn: () => getExecutions(filterJob ? +filterJob : undefined, PAGE_SIZE, filterDays ? +filterDays : undefined, page * PAGE_SIZE),
     refetchInterval: 15_000,
   })
 
@@ -56,7 +58,7 @@ export default function Logs() {
           <select
             className="border rounded-lg px-3 py-2 text-sm"
             value={filterDays}
-            onChange={e => setFilterDays(e.target.value ? +e.target.value : '')}
+            onChange={e => { setFilterDays(e.target.value ? +e.target.value : ''); setPage(0) }}
           >
             <option value="">All Time</option>
             <option value="1">Last 1 Day</option>
@@ -67,7 +69,7 @@ export default function Logs() {
           <select
             className="border rounded-lg px-3 py-2 text-sm"
             value={filterJob}
-            onChange={e => setFilterJob(e.target.value ? +e.target.value : '')}
+            onChange={e => { setFilterJob(e.target.value ? +e.target.value : ''); setPage(0) }}
           >
             <option value="">All Jobs</option>
             {jobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
@@ -160,6 +162,25 @@ export default function Logs() {
             )}
           </tbody>
         </table>
+        {(page > 0 || executions.length === PAGE_SIZE) && (
+          <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
+            <button
+              onClick={() => setPage(p => p - 1)}
+              disabled={page === 0}
+              className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-gray-500">Page {page + 1}</span>
+            <button
+              onClick={() => setPage(p => p + 1)}
+              disabled={executions.length < PAGE_SIZE}
+              className="px-3 py-1.5 border rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

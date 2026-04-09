@@ -38,8 +38,8 @@ export const getStats = () =>
 export const getExecution = (id: number) =>
   client.get<Execution>(`/executions/${id}`).then(r => r.data)
 
-export const getExecutions = (jobId?: number, limit = 50, days?: number) =>
-  client.get<Execution[]>('/executions', { params: { job_id: jobId, limit, days } }).then(r => r.data)
+export const getExecutions = (jobId?: number, limit = 50, days?: number, offset = 0) =>
+  client.get<Execution[]>('/executions', { params: { job_id: jobId, limit, days, offset } }).then(r => r.data)
 
 export const stopExecution = (jobId: number, executionId: number) =>
   client.post(`/jobs/${jobId}/executions/${executionId}/stop`).then(r => r.data)
