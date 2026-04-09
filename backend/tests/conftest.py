@@ -1,8 +1,39 @@
 import os
+import subprocess
+import shutil
+from pathlib import Path
 
-# Set env vars before any app imports so database.py uses SQLite
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
-os.environ.setdefault("SYNC_DATABASE_URL", "sqlite:///")
+# Resolve database URL, mirroring start.sh logic:
+#   1. Check backend/.env for DATABASE_URL
+#   2. If no .env, check if PostgreSQL is running locally via pg_isready
+#   3. Fall back to in-memory SQLite
+_dotenv = Path(__file__).resolve().parent.parent / ".env"
+_db_url = None
+_sync_db_url = None
+
+if _dotenv.exists():
+    for line in _dotenv.read_text().splitlines():
+        line = line.strip()
+        if line.startswith("DATABASE_URL="):
+            _db_url = line.split("=", 1)[1]
+        elif line.startswith("SYNC_DATABASE_URL="):
+            _sync_db_url = line.split("=", 1)[1]
+
+if _db_url:
+    print(f"Tests using PostgreSQL from .env: {_db_url}")
+elif shutil.which("pg_isready") and subprocess.run(
+    ["pg_isready", "-q"], capture_output=True
+).returncode == 0:
+    _db_url = "postgresql+asyncpg:///sdf?host=/var/run/postgresql"
+    _sync_db_url = "postgresql+psycopg2:///sdf?host=/var/run/postgresql"
+    print(f"PostgreSQL detected via pg_isready — tests using: {_db_url}")
+else:
+    _db_url = "sqlite+aiosqlite://"
+    _sync_db_url = "sqlite:///"
+    print("No .env and PostgreSQL not running — tests using in-memory SQLite")
+
+os.environ.setdefault("DATABASE_URL", _db_url)
+os.environ.setdefault("SYNC_DATABASE_URL", _sync_db_url or "sqlite:///")
 
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
@@ -14,11 +45,31 @@ from app.main import app
 
 @pytest.fixture(scope="session")
 async def test_engine():
-    engine = create_async_engine("sqlite+aiosqlite://", echo=False)
+    pool_kwargs = {}
+    if "sqlite" not in _db_url:
+        pool_kwargs = dict(pool_size=5, max_overflow=10, pool_pre_ping=True)
+    engine = create_async_engine(_db_url, echo=False, **pool_kwargs)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
     await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+async def clean_tables(test_engine):
+    """Clean all rows before each test for isolation with persistent databases."""
+    async with test_engine.begin() as conn:
+        if "sqlite" not in _db_url:
+            # PostgreSQL: TRUNCATE with CASCADE handles FK constraints
+            table_names = ", ".join(t.name for t in Base.metadata.sorted_tables)
+            if table_names:
+                from sqlalchemy import text
+                await conn.execute(text(f"TRUNCATE {table_names} CASCADE"))
+        else:
+            # SQLite: delete in reverse FK order
+            for table in reversed(Base.metadata.sorted_tables):
+                await conn.execute(table.delete())
+    yield
 
 
 @pytest.fixture
