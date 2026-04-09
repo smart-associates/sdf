@@ -34,6 +34,21 @@ _FILTER_FORBIDDEN_KEYWORDS = re.compile(
     re.IGNORECASE,
 )
 
+# Reject parenthesised SELECT (subqueries) regardless of case or whitespace
+_FILTER_SUBQUERY = re.compile(r"\(\s*SELECT\b", re.IGNORECASE)
+
+# Match function-call patterns like func_name(...)
+_FILTER_FUNC_CALL = re.compile(r"\b([a-zA-Z_]\w*)\s*\(", re.IGNORECASE)
+
+# Functions safe to use in WHERE clauses (common SQL scalar functions)
+_FILTER_SAFE_FUNCTIONS = frozenset({
+    "cast", "coalesce", "nullif", "trim", "upper", "lower", "length",
+    "substring", "replace", "round", "abs", "ceil", "floor",
+    "date", "year", "month", "day", "now", "current_date",
+    "current_timestamp", "extract", "to_char", "to_date", "to_number",
+    "concat", "left", "right", "lpad", "rpad",
+})
+
 # Safe unquoted identifier patterns per dialect family.
 # PostgreSQL folds unquoted names to lowercase, so any uppercase signals the name
 # was originally quoted at source and must remain quoted on the target.
@@ -73,8 +88,9 @@ def _full_table(schema: Optional[str], table: str, dialect: str = "postgresql") 
 def _validate_filter(table_filter: str) -> str:
     """Reject dangerous patterns in a user-supplied WHERE clause.
 
-    Checks for statement-terminating characters and DML/DDL keywords that
-    have no legitimate use inside a WHERE predicate.
+    Uses a layered approach: first rejects forbidden characters and DML/DDL
+    keywords, then rejects subqueries and function calls that could be used
+    for data exfiltration or side effects.
     """
     for tok in _FILTER_FORBIDDEN_CHARS:
         if tok in table_filter:
@@ -82,6 +98,13 @@ def _validate_filter(table_filter: str) -> str:
     match = _FILTER_FORBIDDEN_KEYWORDS.search(table_filter)
     if match:
         raise ValueError(f"table_filter contains forbidden keyword: {match.group()!r}")
+    if _FILTER_SUBQUERY.search(table_filter):
+        raise ValueError("table_filter must not contain subqueries")
+    if _FILTER_FUNC_CALL.search(table_filter):
+        func_match = _FILTER_FUNC_CALL.search(table_filter)
+        func_name = func_match.group(1).lower()
+        if func_name not in _FILTER_SAFE_FUNCTIONS:
+            raise ValueError(f"table_filter contains disallowed function call: {func_name}()")
     return table_filter
 
 
