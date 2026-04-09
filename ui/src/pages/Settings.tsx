@@ -10,12 +10,18 @@ export default function Settings() {
 
   const { data: settings = [], isLoading } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
 
+  const [saveError, setSaveError] = useState<Record<number, string>>({})
+
   const updateMut = useMutation({
     mutationFn: ({ id, value }: { id: number; value: string }) => updateSetting(id, { value }),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['settings'] })
+      setSaveError(s => ({ ...s, [vars.id]: '' }))
       setSaved(s => ({ ...s, [vars.id]: true }))
       setTimeout(() => setSaved(s => ({ ...s, [vars.id]: false })), 2000)
+    },
+    onError: (e: any, vars) => {
+      setSaveError(s => ({ ...s, [vars.id]: e.response?.data?.detail || 'Save failed' }))
     },
   })
 
@@ -75,6 +81,7 @@ export default function Settings() {
                 <Save size={13} />
                 {saved[s.id] ? 'Saved' : 'Save'}
               </button>
+              {saveError[s.id] && <span className="text-xs text-red-500">{saveError[s.id]}</span>}
             </div>
           </div>
         ))}

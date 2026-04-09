@@ -34,7 +34,7 @@ export default function Jobs() {
   const { data: connections = [] } = useQuery({ queryKey: ['connections'], queryFn: getConnections })
   const [execJobId, setExecJobId] = useState<number | null>(null)
 
-  const { data: execStatus } = useQuery({
+  const { data: execStatus, isError: execError } = useQuery({
     queryKey: ['execution', executionId],
     queryFn: () => getExecution(executionId!),
     enabled: !!executionId && modal === 'execution',
@@ -260,7 +260,9 @@ export default function Jobs() {
 
       {modal === 'execution' && (
         <Modal title={execStatus ? `Execution #${execStatus.id}` : 'Starting execution…'} onClose={() => setModal(null)} size="lg">
-          {!execStatus ? (
+          {execError ? (
+            <div className="py-10 text-center text-red-500 text-sm">Failed to load execution status</div>
+          ) : !execStatus ? (
             <div className="py-10 text-center text-gray-400 text-sm">Loading…</div>
           ) : (
             <div className="space-y-3">
