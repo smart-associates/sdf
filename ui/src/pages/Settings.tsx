@@ -38,7 +38,17 @@ export default function Settings() {
               {s.description && <p className="text-xs text-gray-500 mt-0.5">{s.description}</p>}
             </div>
             <div className="flex items-center gap-2">
-              {s.data_type === 'boolean' ? (
+              {s.key === 'csv_quoting' ? (
+                <select
+                  value={getValue(s)}
+                  onChange={e => setEdits(d => ({ ...d, [s.id]: e.target.value }))}
+                  className="border rounded-lg px-3 py-1.5 text-sm w-40"
+                >
+                  <option value="none">None (escape)</option>
+                  <option value="single">Single ( ' )</option>
+                  <option value="double">Double ( " )</option>
+                </select>
+              ) : s.data_type === 'boolean' ? (
                 <input
                   type="checkbox"
                   checked={getValue(s) === '1' || getValue(s) === 'true'}

@@ -134,6 +134,9 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         tgt = data["tgt"]
 
         batch_size = int(_get_setting_sync("batch_size", "1000"))
+        csv_quoting = _get_setting_sync("csv_quoting", "none").strip() or "none"
+        csv_delimiter = _get_setting_sync("csv_delimiter", ",").strip() or ","
+        csv_header = _get_setting_sync("csv_header", "true").strip() not in ("0", "false", "False")
 
         src_is_file = src["db_type"] == "filesystem"
         tgt_is_file = tgt["db_type"] == "filesystem"
@@ -209,7 +212,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                     src_fmt = src.get("staging_format") or "parquet"
                     tgt_fmt = tgt.get("staging_format") or "parquet"
                     if src_fmt == "csv" and tgt_fmt == "csv":
-                        count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
+                        count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb, csv_quoting=csv_quoting, csv_delimiter=csv_delimiter, include_header=csv_header)
                     elif src_fmt == "parquet" and tgt_fmt == "parquet":
                         count = migrate_parquet_to_parquet(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
                     elif src_fmt == "avro" and tgt_fmt == "avro":
@@ -227,7 +230,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 elif tgt_type == "filesystem":
                     tgt_fmt = tgt.get("staging_format") or "parquet"
                     if tgt_fmt == "csv":
-                        count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb, batch_size)
+                        count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb, batch_size, csv_quoting=csv_quoting, csv_delimiter=csv_delimiter, include_header=csv_header)
                     elif tgt_fmt == "avro":
                         count = migrate_db_to_avro(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb)
                     else:

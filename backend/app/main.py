@@ -86,6 +86,9 @@ async def seed_defaults():
 
     defaults = [
         ("batch_size", "1000", "Number of rows per INSERT batch", "integer"),
+        ("csv_quoting", "none", "Quote character for CSV export: none (backslash escape), single, or double", "string"),
+        ("csv_delimiter", ",", "Field delimiter for CSV output. Use escape sequences for control characters: \\t (tab), \\001 (SOH), etc.", "string"),
+        ("csv_header", "true", "Include column headers in CSV export", "boolean"),
     ]
     async with AsyncSessionLocal() as db:
         for key, value, desc, dtype in defaults:

@@ -548,6 +548,26 @@ def _infer_pa_schema(rows: list[dict], cols: list[str]):
 # CSV helpers
 # ---------------------------------------------------------------------------
 
+def _decode_csv_delimiter(raw: str) -> str:
+    """Decode a stored delimiter string, expanding escape sequences like \\t, \\001, \\x01."""
+    if not raw:
+        return ","
+    try:
+        return raw.encode("raw_unicode_escape").decode("unicode_escape")
+    except Exception:
+        return raw or ","
+
+
+def _csv_quoting_kwargs(csv_quoting: str) -> dict:
+    """Translate the csv_quoting setting to csv.writer / csv.DictWriter keyword args."""
+    if csv_quoting == "none":
+        return {"quoting": csv.QUOTE_NONE, "escapechar": "\\"}
+    elif csv_quoting == "single":
+        return {"quotechar": "'", "quoting": csv.QUOTE_ALL}
+    else:  # "double"
+        return {"quotechar": '"', "quoting": csv.QUOTE_ALL}
+
+
 def _csv_path(directory: str, table: str) -> str:
     return os.path.join(directory, f"{table}.csv")
 
@@ -610,6 +630,9 @@ def migrate_db_to_csv(
     migration_mode: str,
     progress_cb: Optional[Callable[[int], None]] = None,
     batch_size: int = 1000,
+    csv_quoting: str = "none",
+    csv_delimiter: str = ",",
+    include_header: bool = True,
 ) -> int:
     """Stream rows from a source DB table and write to a CSV file."""
     src_full = _full_table(src_schema, src_table, src_engine.dialect.name)
@@ -627,8 +650,8 @@ def migrate_db_to_csv(
         result = src_conn.execution_options(stream_results=True).execute(text(query))
         cols = list(result.keys())
         with open(path, file_mode, newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=cols)
-            if not append_mode:
+            writer = csv.DictWriter(f, fieldnames=cols, delimiter=_decode_csv_delimiter(csv_delimiter), **_csv_quoting_kwargs(csv_quoting))
+            if not append_mode and include_header:
                 writer.writeheader()
             for row in result:
                 writer.writerow({k: v.isoformat() if hasattr(v, 'isoformat') else ("" if v is None else v) for k, v in zip(cols, row)})
@@ -907,6 +930,9 @@ def migrate_csv_to_csv(
     tgt_table: str,
     migration_mode: str,
     progress_cb: Optional[Callable[[int], None]] = None,
+    csv_quoting: str = "none",
+    csv_delimiter: str = ",",
+    include_header: bool = True,
 ) -> int:
     """Copy a CSV file to another directory."""
     src_path = _csv_path(src_dir, src_table)
@@ -923,8 +949,8 @@ def migrate_csv_to_csv(
         reader = csv.DictReader(src_f)
         cols = list(reader.fieldnames or [])
         with open(tgt_path, file_mode, newline="", encoding="utf-8") as tgt_f:
-            writer = csv.DictWriter(tgt_f, fieldnames=cols)
-            if not append_mode:
+            writer = csv.DictWriter(tgt_f, fieldnames=cols, delimiter=_decode_csv_delimiter(csv_delimiter), **_csv_quoting_kwargs(csv_quoting))
+            if not append_mode and include_header:
                 writer.writeheader()
             for row in reader:
                 writer.writerow(row)
