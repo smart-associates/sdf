@@ -27,7 +27,7 @@ export default function Jobs() {
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ['jobs'],
     queryFn: getJobs,
-    refetchInterval: (query) => query.state.data?.some(j => j.running_execution_id) ? 2000 : false,
+    refetchInterval: (query) => query.state.data?.some(j => j.running_execution_id) ? 5000 : false,
   })
   const { data: connections = [] } = useQuery({ queryKey: ['connections'], queryFn: getConnections })
   const [execJobId, setExecJobId] = useState<number | null>(null)
@@ -38,7 +38,7 @@ export default function Jobs() {
     enabled: !!executionId && modal === 'execution',
     refetchInterval: (query) => {
       const status = query.state.data?.status
-      return status === 'running' ? 2000 : false
+      return status === 'running' ? 5000 : false
     },
   })
 
