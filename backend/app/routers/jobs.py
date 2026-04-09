@@ -137,20 +137,22 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
         else:
             src_pw = decrypt(src.password or "")
             src_engine = build_engine(src.db_type, src.host, src.port, src.database, src.username, src_pw)
-            for entry in tables:
-                if "." in entry:
-                    schema, table = entry.split(".", 1)
-                else:
-                    schema, table = None, entry
-                exists = table_exists(src_engine, table, schema)
-                items.append(JobValidationItem(
-                    table_name=entry,
-                    exists=exists,
-                    message="Table found" if exists else "Table not found on source"
-                ))
-                if not exists:
-                    valid = False
-            src_engine.dispose()
+            try:
+                for entry in tables:
+                    if "." in entry:
+                        schema, table = entry.split(".", 1)
+                    else:
+                        schema, table = None, entry
+                    exists = table_exists(src_engine, table, schema)
+                    items.append(JobValidationItem(
+                        table_name=entry,
+                        exists=exists,
+                        message="Table found" if exists else "Table not found on source"
+                    ))
+                    if not exists:
+                        valid = False
+            finally:
+                src_engine.dispose()
     except Exception as e:
         warnings.append(f"Could not connect to source: {str(e)}")
         valid = False
@@ -170,14 +172,16 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
             else:
                 tgt_pw = decrypt(tgt.password or "")
                 tgt_engine = build_engine(tgt.db_type, tgt.host, tgt.port, tgt.database, tgt.username, tgt_pw)
-                for item in items:
-                    entry = item.table_name
-                    table = entry.split(".", 1)[1] if "." in entry else entry
-                    tgt_schema = job.target_schema
-                    if not table_exists(tgt_engine, table, tgt_schema):
-                        warnings.append(f"Target table '{table}' does not exist (enable 'create target table' to auto-create)")
-                        valid = False  # missing target table blocks execution
-                tgt_engine.dispose()
+                try:
+                    for item in items:
+                        entry = item.table_name
+                        table = entry.split(".", 1)[1] if "." in entry else entry
+                        tgt_schema = job.target_schema
+                        if not table_exists(tgt_engine, table, tgt_schema):
+                            warnings.append(f"Target table '{table}' does not exist (enable 'create target table' to auto-create)")
+                            valid = False  # missing target table blocks execution
+                finally:
+                    tgt_engine.dispose()
         except Exception as e:
             warnings.append(f"Could not connect to target: {str(e)}")
             valid = False
