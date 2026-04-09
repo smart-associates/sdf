@@ -84,7 +84,18 @@ def _get_setting_sync(key: str, default: str) -> str:
         return row[0] if row and row[0] is not None else default
 
 
+_EXECUTION_COLUMNS = frozenset({
+    "status", "completed_at", "record_count", "error_message",
+})
+_EXEC_TABLE_COLUMNS = frozenset({
+    "status", "completed_at", "record_count", "error_message", "estimated_row_count",
+})
+
+
 def _update_execution_sync(execution_id: int, **kwargs):
+    invalid = kwargs.keys() - _EXECUTION_COLUMNS
+    if invalid:
+        raise ValueError(f"Invalid columns for job_executions: {invalid}")
     with _sync_engine.begin() as conn:
         sets = ", ".join(f"{k} = :{k}" for k in kwargs)
         conn.execute(
@@ -107,6 +118,9 @@ def _create_exec_table_sync(execution_id: int, table_name: str, estimated_row_co
 
 
 def _update_exec_table_sync(exec_table_id: int, **kwargs):
+    invalid = kwargs.keys() - _EXEC_TABLE_COLUMNS
+    if invalid:
+        raise ValueError(f"Invalid columns for job_execution_tables: {invalid}")
     with _sync_engine.begin() as conn:
         sets = ", ".join(f"{k} = :{k}" for k in kwargs)
         conn.execute(
