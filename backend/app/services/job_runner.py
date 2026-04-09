@@ -30,13 +30,11 @@ class _StopRequested(Exception):
 
 
 # Module-level sync engine shared across all background threads
-_sync_engine = create_engine(
-    settings.sync_database_url,
-    pool_size=10,
-    max_overflow=20,
-    pool_recycle=1800,
-    pool_pre_ping=True,
-)
+_sync_pool_kwargs = {}
+if "sqlite" not in settings.sync_database_url:
+    _sync_pool_kwargs = dict(pool_size=10, max_overflow=20, pool_recycle=1800, pool_pre_ping=True)
+
+_sync_engine = create_engine(settings.sync_database_url, **_sync_pool_kwargs)
 
 # Registry of stop events keyed by execution_id
 _stop_events: dict = {}
