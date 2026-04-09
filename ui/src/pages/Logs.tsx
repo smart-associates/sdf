@@ -30,9 +30,9 @@ function StepLog({ executionId, isRunning }: { executionId: number; isRunning: b
   if (logs.length === 0) return <div className="text-gray-400 text-xs py-2">No log entries</div>
 
   return (
-    <div className="max-h-60 overflow-y-auto border rounded bg-gray-900 text-xs font-mono">
+    <div className="max-h-60 overflow-y-auto border rounded bg-gray-50 text-xs font-mono">
       {logs.map((log: LogEntry) => (
-        <div key={log.id} className="flex gap-3 px-3 py-1 border-b border-gray-800 last:border-b-0">
+        <div key={log.id} className="flex gap-3 px-3 py-1 border-b border-gray-200 last:border-b-0">
           <span className="text-gray-500 shrink-0 w-20">
             {new Date(log.created_at).toLocaleTimeString()}
           </span>
