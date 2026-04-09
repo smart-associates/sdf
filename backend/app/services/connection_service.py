@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime, timezone
 from app.models.connection import DatabaseConnection
-from app.services.encryption import encrypt, decrypt, mask, is_masked, MASKED
+from app.services.encryption import encrypt, decrypt, mask, is_masked, MASKED, DecryptionError
 
 DEFAULT_PORTS = {"postgresql": 5432, "mysql": 3306, "mssql": 1433}
 _DRIVERS = {
@@ -147,7 +147,15 @@ async def test_connection(db: AsyncSession, conn_id: int) -> dict:
             await db.commit()
             return {"success": False, "message": "Directory not accessible", "tested_at": tested_at, "error": error_msg}
 
-    plaintext_pw = decrypt(conn.password) if conn.password else ""
+    try:
+        plaintext_pw = decrypt(conn.password) if conn.password else ""
+    except DecryptionError as e:
+        error_msg = str(e)
+        conn.last_test_status = "failed"
+        conn.last_tested_at = tested_at
+        conn.last_test_error = error_msg
+        await db.commit()
+        return {"success": False, "message": "Connection failed", "tested_at": tested_at, "error": error_msg}
     port = conn.port or DEFAULT_PORTS.get(conn.db_type, 5432)
     url = URL.create(_DRIVERS[conn.db_type], username=conn.username,
                      password=plaintext_pw, host=conn.host,
