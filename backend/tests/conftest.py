@@ -69,8 +69,7 @@ async def test_engine():
     engine = create_async_engine(_db_url, echo=False, **pool_kwargs)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield engine
-    await engine.dispose()
+    return engine
 
 
 @pytest.fixture(autouse=True)
