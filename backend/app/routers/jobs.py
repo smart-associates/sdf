@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
-from app.models.job import Job, JobExecution, JobExecutionTable
+from app.models.job import Job, JobExecution, JobExecutionTable, JobExecutionLog
 from app.models.connection import DatabaseConnection
 from app.schemas.job import JobCreate, JobUpdate, JobResponse, JobValidationResponse, JobValidationItem, JobExecuteResponse
 from app.services.job_runner import start_job_execution, stop_execution
@@ -96,6 +96,7 @@ async def delete_job(job_id: int, db: AsyncSession = Depends(get_db)):
     )
     exec_ids = [r[0] for r in exec_ids_result.all()]
     if exec_ids:
+        await db.execute(sa.delete(JobExecutionLog).where(JobExecutionLog.execution_id.in_(exec_ids)))
         await db.execute(sa.delete(JobExecutionTable).where(JobExecutionTable.execution_id.in_(exec_ids)))
         await db.execute(sa.delete(JobExecution).where(JobExecution.job_id == job_id))
     await db.delete(job)
