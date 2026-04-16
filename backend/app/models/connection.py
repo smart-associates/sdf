@@ -12,7 +12,7 @@ class DatabaseConnection(Base):
     port = Column(Integer)
     database = Column(String(255), nullable=False)
     username = Column(String(255))
-    password = Column(String(1024))  # encrypted
+    password = Column(String(8192))  # encrypted; sized to hold large encrypted credentials
     staging_format = Column(String(50))  # csv|parquet (filesystem connections only)
     last_test_status = Column(String(50))   # success|failed
     last_tested_at = Column(String(50))

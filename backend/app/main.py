@@ -47,6 +47,7 @@ async def run_migrations():
         "ALTER TABLE job_executions ALTER COLUMN completed_at TYPE TIMESTAMPTZ USING completed_at::timestamptz",
         "ALTER TABLE job_execution_tables ALTER COLUMN started_at TYPE TIMESTAMPTZ USING started_at::timestamptz",
         "ALTER TABLE job_execution_tables ALTER COLUMN completed_at TYPE TIMESTAMPTZ USING completed_at::timestamptz",
+        "ALTER TABLE database_connections ALTER COLUMN password TYPE VARCHAR(8192)",
         """CREATE TABLE IF NOT EXISTS job_execution_logs (
                id SERIAL PRIMARY KEY,
                execution_id INTEGER NOT NULL REFERENCES job_executions(id),
