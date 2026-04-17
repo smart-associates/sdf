@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     sync_database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/sdf"
     encryption_key: str = "change-me-32-char-key-for-prod!!"
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    ui_dist_dir: str = "/app/ui_dist"
 
     class Config:
         env_file = ".env"

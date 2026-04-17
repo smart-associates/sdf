@@ -1,0 +1,41 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+.github
+
+# Python
+.venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+backend/sdf.db
+backend/*.db
+backend/.env
+
+# Node / UI
+ui/node_modules
+ui/dist
+ui/coverage
+ui/.vite
+
+# Local env files (but keep the example)
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Repo-level extras not needed in the image
+scripts
+LICENSE
+CONTRIBUTING.md
+GETTING_STARTED.md

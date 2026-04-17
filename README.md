@@ -21,33 +21,66 @@ A web-based data migration tool for moving data between databases and file forma
 ## Architecture
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────────┐
-│   React + Vite  │────▶│  FastAPI (Python) │────▶│ PostgreSQL / SQLite │
-│   (port 5173)   │     │   (port 8000)     │     │                     │
-└─────────────────┘     └──────────────────┘     └─────────────────────┘
+┌─────────────────────────────────────────┐     ┌─────────────────────┐
+│  React build + FastAPI (single image)   │────▶│ PostgreSQL / SQLite │
+│              port 8000                  │     │  (auto-detected)    │
+└─────────────────────────────────────────┘     └─────────────────────┘
 ```
 
-- **Frontend:** React 18 + TypeScript + Tailwind CSS + TanStack Query
+- **Frontend:** React 18 + TypeScript + Tailwind CSS + TanStack Query (built and served as static assets by FastAPI)
 - **Backend:** FastAPI + SQLAlchemy (async) + Uvicorn
-- **Database:** PostgreSQL (preferred) or SQLite (auto-detected on startup)
+- **Database:** PostgreSQL (auto-detected on host) or SQLite (in-container fallback, ephemeral)
 
 ## Quick Start
 
-**Docker (recommended):**
+**Docker (recommended — pulls prebuilt image from Docker Hub):**
 ```bash
-git clone git@github.com:smart-associates/sdf.git
-cd sdf
-./start.sh docker
+# Grab just the compose file; no clone needed.
+curl -fsSL https://raw.githubusercontent.com/smart-associates/sdf/main/docker-compose.yml -o docker-compose.yml
+docker compose pull
+docker compose up
 ```
 
-**Local dev:**
+Or from a checkout:
 ```bash
-git clone git@github.com:smart-associates/sdf.git
-cd sdf
+git clone git@github.com:smart-associates/sdf.git && cd sdf
+docker compose pull && docker compose up
+```
+
+The container auto-detects PostgreSQL on the host (`host.docker.internal:5432`). If none is
+reachable it falls back to an in-container SQLite database (ephemeral — no persistence).
+Override via env vars (see [GETTING_STARTED.md](GETTING_STARTED.md#option-2-docker-compose)).
+
+Pin a specific version: `SDF_IMAGE_TAG=1.2.0 docker compose up`.
+
+**Build locally, run via compose:**
+```bash
+git clone git@github.com:smart-associates/sdf.git && cd sdf
+docker build -t smartassociates/sdf:latest .   # tag matches what compose expects
+docker compose up                              # no rebuild, no pull — uses the local image
+```
+
+**Plain Docker (no compose):**
+```bash
+git clone git@github.com:smart-associates/sdf.git && cd sdf
+docker build -t sdf:local .
+
+docker run --rm -p 8000:8000 \
+  --add-host=host.docker.internal:host-gateway \
+  -e ENCRYPTION_KEY="$(openssl rand -hex 16)" \
+  sdf:local
+```
+
+The `--add-host` flag is only needed on Linux — it wires `host.docker.internal` to the host gateway so the container can auto-detect a host PostgreSQL. Docker Desktop (macOS/Windows) resolves it automatically.
+
+**Local dev (non-Docker):**
+```bash
+git clone git@github.com:smart-associates/sdf.git && cd sdf
 ./start.sh dev
 ```
 
-Then open [http://localhost:5173](http://localhost:5173).
+Open [http://localhost:8000](http://localhost:8000) for the Docker path, or
+[http://localhost:5173](http://localhost:5173) for local-dev mode (Vite dev server).
 
 See [GETTING_STARTED.md](GETTING_STARTED.md) for detailed setup instructions.
 
@@ -62,16 +95,16 @@ sdf/
 │   │   ├── schemas/       # Pydantic request/response schemas
 │   │   ├── routers/       # API route handlers
 │   │   └── services/      # Business logic + migration engine
-│   ├── requirements.txt
-│   └── Dockerfile
+│   ├── docker-entrypoint.py   # Postgres-probe + uvicorn launcher (container only)
+│   └── requirements.txt
 ├── ui/                    # React frontend
 │   ├── src/
 │   │   ├── api/           # Axios API client functions
 │   │   ├── pages/         # Page components
 │   │   └── components/    # Shared UI components
-│   ├── package.json
-│   └── Dockerfile
-├── docker-compose.yml
+│   └── package.json
+├── Dockerfile             # Unified image (UI build + FastAPI runtime)
+├── docker-compose.yml     # Single-service wrapper around the unified image
 ├── .env.example
 └── start.sh
 ```

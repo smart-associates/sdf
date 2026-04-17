@@ -1,6 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from pathlib import Path
 import logging
 
 from app.core.config import settings
@@ -128,3 +131,19 @@ app.include_router(settings_router.router)
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+_UI_DIST = Path(settings.ui_dist_dir)
+if _UI_DIST.is_dir() and (_UI_DIST / "index.html").is_file():
+    _assets_dir = _UI_DIST / "assets"
+    if _assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        if full_path.startswith(("api/", "health", "docs", "redoc", "openapi.json")):
+            raise HTTPException(status_code=404)
+        candidate = _UI_DIST / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_UI_DIST / "index.html")

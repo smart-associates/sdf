@@ -117,25 +117,111 @@ npm run dev
 
 ## Option 2: Docker Compose
 
-If you prefer containers or don't have PostgreSQL installed locally:
+The Docker build is a single unified image published at [`smartassociates/sdf`](https://hub.docker.com/r/smartassociates/sdf) on Docker Hub. The image bundles the built React frontend + FastAPI backend, serving both on port 8000. There is **no Postgres container** — at startup the container tries to connect to PostgreSQL on the host, and if it can't reach one, it falls back to an in-container SQLite database (ephemeral, no volume).
 
 ```bash
-./start.sh docker
+docker compose pull      # fetch the published image (skip if you want to build locally)
+docker compose up
 ```
 
-This builds and starts three containers:
-- `postgres` — PostgreSQL 16 database
-- `api` — FastAPI backend on port 8000
-- `ui` — Vite dev server on port 5173
+Or, as a one-shot build + run from source (devs):
+```bash
+./start.sh docker        # or: docker compose up --build
+```
 
-Open [http://localhost:5173](http://localhost:5173).
+Or, to build and run as two explicit steps (useful for faster iteration — you can rebuild without restarting the stack, and inspect the image before it runs):
+```bash
+docker build -t smartassociates/sdf:latest .   # tag matches the default in docker-compose.yml
+docker compose up                              # picks up the local image, no rebuild
+```
+
+Since `pull_policy: missing` is set in the compose file, `docker compose up` will use the image you just built rather than trying to pull from Docker Hub.
+
+Open [http://localhost:8000](http://localhost:8000). API docs at [http://localhost:8000/docs](http://localhost:8000/docs).
 
 To stop: `Ctrl+C`, then `docker compose down`.
 
-To reset the database (wipes all data):
+### Option 2b: Plain `docker build` + `docker run`
+
+If you'd rather not use Compose, the same workflow works with plain Docker commands.
+
+**Build the image locally:**
 ```bash
-docker compose down -v
+docker build -t sdf:local .
 ```
+
+The build runs both stages — a Node 20 stage that compiles the React UI to static assets, and a Python 3.11-slim runtime stage that installs backend deps and copies the build output into `/app/ui_dist`. The first build takes a few minutes; subsequent builds reuse layer cache and finish in seconds if only source changed.
+
+Optional build args for labels / release metadata:
+```bash
+docker build \
+  --build-arg SDF_VERSION=1.2.0 \
+  --build-arg SDF_GIT_SHA="$(git rev-parse --short HEAD)" \
+  -t sdf:local .
+```
+
+**Run the image:**
+```bash
+docker run --rm -p 8000:8000 \
+  --add-host=host.docker.internal:host-gateway \
+  -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
+  sdf:local
+```
+
+Or run the published image without building anything:
+```bash
+docker run --rm -p 8000:8000 \
+  --add-host=host.docker.internal:host-gateway \
+  -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
+  smartassociates/sdf:latest
+```
+
+Flags explained:
+- `-p 8000:8000` — publish the app port.
+- `--add-host=host.docker.internal:host-gateway` — **Linux only.** Lets the container reach the host's `localhost` so it can probe your host PostgreSQL. Docker Desktop (macOS/Windows) resolves `host.docker.internal` natively and ignores this flag.
+- `-e ENCRYPTION_KEY=...` — stable secret used to encrypt stored DB passwords. Keep it constant across runs or previously-saved credentials become unreadable.
+
+Pass any of the `POSTGRES_*` env vars (see table below) with additional `-e` flags to override detection.
+
+To run detached with a healthcheck-visible name:
+```bash
+docker run -d --name sdf -p 8000:8000 \
+  --add-host=host.docker.internal:host-gateway \
+  -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
+  smartassociates/sdf:latest
+
+docker logs -f sdf      # watch startup (entrypoint logs which DB it picked)
+docker stop sdf         # stop
+```
+
+### Pinning a version
+
+The compose file uses `image: smartassociates/sdf:${SDF_IMAGE_TAG:-latest}`. Pin a release by setting the env var:
+
+```bash
+SDF_IMAGE_TAG=0.1.0 docker compose up
+# or in a .env file: SDF_IMAGE_TAG=0.1.0
+```
+
+Each published release is also tagged by its git sha (e.g. `smartassociates/sdf:abc1234`), so you can pin to an exact commit.
+
+### How the container finds PostgreSQL
+
+By default the container probes `host.docker.internal:5432` as user `postgres` on database `sdf`. On Linux the compose file already wires `host.docker.internal` to the host gateway (`extra_hosts`), so no runtime flags are needed. On macOS/Windows Docker Desktop this resolves automatically.
+
+Override any of the following via shell env or a `.env` file at the repo root:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `POSTGRES_HOST` | `host.docker.internal` | Hostname for the probe |
+| `POSTGRES_PORT` | `5432` | Port for the probe |
+| `POSTGRES_USER` | `postgres` | User for the probe |
+| `POSTGRES_PASSWORD` | _(empty)_ | Password for the probe |
+| `POSTGRES_DB` | `sdf` | Database name |
+| `DATABASE_URL` | _(unset)_ | If set, skips auto-detection entirely |
+| `ENCRYPTION_KEY` | placeholder | **Set this to a stable 32-char string in production** |
+
+If probe fails, the container uses `sqlite:////tmp/sdf.db` — fine for evaluation, but data is lost when the container exits. For persistent usage, run a PostgreSQL on your host or pass `DATABASE_URL`.
 
 ---
 
@@ -203,7 +289,7 @@ You can add additional custom settings via the Settings page or the `/api/settin
 
 **"Connection refused" when testing a connection**
 - Verify host/port are reachable from the machine running the backend.
-- In Docker mode, use the host machine's IP (not `localhost`) to reach services outside Docker.
+- In Docker mode, use `host.docker.internal` (not `localhost`) to reach services running on the host. The compose file already wires this for Linux.
 
 **Job fails immediately with permission error**
 - The database user needs SELECT on source tables and INSERT/CREATE on target tables.
@@ -225,3 +311,25 @@ You can add additional custom settings via the Settings page or the `/api/settin
 | `SYNC_DATABASE_URL` | No | auto-detected | Sync DB connection string (psycopg2 or sqlite) |
 | `ENCRYPTION_KEY` | Yes | — | 32-char key for encrypting DB passwords |
 | `CORS_ORIGINS` | No | `["http://localhost:5173"]` | Allowed frontend origins |
+
+---
+
+## Publishing a new release (maintainers only)
+
+The Docker image is pushed to Docker Hub as multi-arch (`linux/amd64` + `linux/arm64`) via a local script. Prerequisites: `docker login` with push access to the `smartassociates` namespace, and `docker buildx` available (bundled with Docker Desktop; on plain Linux run `docker run --rm --privileged tonistiigi/binfmt --install all` once to enable cross-builds).
+
+```bash
+# Tag the current commit as :latest and :<git-sha>:
+./scripts/publish.sh
+
+# Additionally tag as a named version:
+./scripts/publish.sh 1.2.0
+```
+
+The script builds, pushes, and tags in one shot. Verify with:
+
+```bash
+docker buildx imagetools inspect smartassociates/sdf:1.2.0
+```
+
+If the working tree is dirty, the git-sha tag gets a `-dirty` suffix — useful for diagnosing "what exactly did I push" but a signal to clean up before a real release.
