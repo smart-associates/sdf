@@ -69,14 +69,14 @@ async def run_migrations():
 async def recover_stale_executions():
     """Mark any orphaned 'running' executions as failed on startup."""
     from app.database import engine
-    from sqlalchemy import text
+    from sqlalchemy import text, bindparam
 
     logger = logging.getLogger(__name__)
     async with engine.begin() as conn:
         result = await conn.execute(text(
             """UPDATE job_executions
                SET status = 'failed',
-                   completed_at = now(),
+                   completed_at = CURRENT_TIMESTAMP,
                    error_message = 'Process restarted while execution was running'
                WHERE status = 'running'
                RETURNING id"""
@@ -85,13 +85,14 @@ async def recover_stale_executions():
         if rows:
             exec_ids = [r[0] for r in rows]
             logger.warning("Recovered %d stale execution(s): %s", len(exec_ids), exec_ids)
-            await conn.execute(text(
+            stmt = text(
                 """UPDATE job_execution_tables
                    SET status = 'failed',
-                       completed_at = now()
-                   WHERE execution_id = ANY(:ids)
+                       completed_at = CURRENT_TIMESTAMP
+                   WHERE execution_id IN :ids
                      AND status = 'running'"""
-            ), {"ids": exec_ids})
+            ).bindparams(bindparam("ids", expanding=True))
+            await conn.execute(stmt, {"ids": exec_ids})
 
 
 async def seed_defaults():
