@@ -12,110 +12,7 @@
 
 ---
 
-## Option 1: Local Development (recommended)
-
-### 1. Start everything
-
-```bash
-./start.sh dev
-```
-
-`start.sh` auto-detects your database:
-- If PostgreSQL is running locally (checked via `pg_isready`), it connects over the unix socket
-- If PostgreSQL is not running, it falls back to a local SQLite database (`sdf.db`)
-
-This will:
-1. Auto-detect PostgreSQL or fall back to SQLite
-2. Create a Python virtualenv in `backend/.venv`
-3. Install Python dependencies
-4. Start FastAPI on port 8000
-5. Install npm packages
-6. Start Vite dev server on port 5173
-
-### 2. (Optional) Use PostgreSQL
-
-If you want to use PostgreSQL, make sure it's running and create the database:
-
-```bash
-psql -U postgres -c "CREATE DATABASE sdf;"
-```
-
-Then restart with `./start.sh dev` — it will detect PostgreSQL automatically.
-
-### 3. (Optional) Override database settings
-
-To override auto-detection, copy `.env.example` to `backend/.env` and edit it:
-
-```bash
-cp .env.example backend/.env
-```
-
-```env
-DATABASE_URL=postgresql+asyncpg:///sdf?host=/var/run/postgresql
-SYNC_DATABASE_URL=postgresql+psycopg2:///sdf?host=/var/run/postgresql
-ENCRYPTION_KEY=your-random-32-char-secret-key!!
-CORS_ORIGINS=["http://localhost:5173"]
-```
-
-> **Important:** Change `ENCRYPTION_KEY` to a random 32-character string before storing any credentials. This key encrypts database passwords at rest.
-
-When `backend/.env` contains `DATABASE_URL`, auto-detection is skipped.
-
-Open [http://localhost:5173](http://localhost:5173). Press `Ctrl+C` to stop both services.
-
----
-
-## Running Tests
-
-### Backend (pytest)
-
-```bash
-cd backend
-source .venv/bin/activate
-python -m pytest -v
-```
-
-Database detection mirrors `start.sh`: tests use PostgreSQL if a `backend/.env` file exists or if `pg_isready` succeeds, otherwise they use in-memory SQLite. When PostgreSQL is used, tests run against a separate `sdf_test` database (auto-created if needed) so your development data is never affected.
-
-### Frontend (Vitest)
-
-```bash
-cd ui
-npx vitest run
-```
-
-Or run in watch mode during development:
-
-```bash
-cd ui
-npx vitest
-```
-
----
-
-<details>
-<summary>Manual start (without start.sh)</summary>
-
-**Backend:**
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-**Frontend:**
-```bash
-cd ui
-npm install
-npm run dev
-```
-</details>
-
----
-
-## Option 2: Docker Compose
+## Option 1: Docker Compose
 
 The Docker build is a single unified image published at [`smartassociates/sdf`](https://hub.docker.com/r/smartassociates/sdf) on Docker Hub. The image bundles the built React frontend + FastAPI backend, serving both on port 8000. There is **no Postgres container** — at startup the container tries to connect to PostgreSQL on the host, and if it can't reach one, it falls back to an in-container SQLite database (ephemeral, no volume).
 
@@ -141,7 +38,7 @@ Open [http://localhost:8000](http://localhost:8000). API docs at [http://localho
 
 To stop: `Ctrl+C`, then `docker compose down`.
 
-### Option 2b: Plain `docker build` + `docker run`
+### Option 1b: Plain `docker build` + `docker run`
 
 If you'd rather not use Compose, the same workflow works with plain Docker commands.
 
@@ -225,6 +122,79 @@ If probe fails, the container uses `sqlite:////tmp/sdf.db` — fine for evaluati
 
 ---
 
+## Option 2: Local Development (recommended)
+
+### a. Start everything
+
+```bash
+./start.sh dev
+```
+
+`start.sh` auto-detects your database:
+- If PostgreSQL is running locally (checked via `pg_isready`), it connects over the unix socket
+- If PostgreSQL is not running, it falls back to a local SQLite database (`sdf.db`)
+
+This will:
+1. Auto-detect PostgreSQL or fall back to SQLite
+2. Create a Python virtualenv in `backend/.venv`
+3. Install Python dependencies
+4. Start FastAPI on port 8000
+5. Install npm packages
+6. Start Vite dev server on port 5173
+
+### b. (Optional) Use PostgreSQL
+
+If you want to use PostgreSQL, make sure it's running and create the database:
+
+```bash
+psql -U postgres -c "CREATE DATABASE sdf;"
+```
+
+Then restart with `./start.sh dev` — it will detect PostgreSQL automatically.
+
+### c. (Optional) Override database settings
+
+To override auto-detection, copy `.env.example` to `backend/.env` and edit it:
+
+```bash
+cp .env.example backend/.env
+```
+
+```env
+DATABASE_URL=postgresql+asyncpg:///sdf?host=/var/run/postgresql
+SYNC_DATABASE_URL=postgresql+psycopg2:///sdf?host=/var/run/postgresql
+ENCRYPTION_KEY=your-random-32-char-secret-key!!
+CORS_ORIGINS=["http://localhost:5173"]
+```
+
+> **Important:** Change `ENCRYPTION_KEY` to a random 32-character string before storing any credentials. This key encrypts database passwords at rest.
+
+When `backend/.env` contains `DATABASE_URL`, auto-detection is skipped.
+
+Open [http://localhost:5173](http://localhost:5173). Press `Ctrl+C` to stop both services.
+
+<details>
+<summary>Manual start (without start.sh)</summary>
+
+**Backend:**
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Frontend:**
+```bash
+cd ui
+npm install
+npm run dev
+```
+</details>
+
+---
+
 ## First Use
 
 ### 1. Add a database connection
@@ -265,6 +235,34 @@ Click a job row to see per-table progress, estimated row counts, and status.
 **Logs** shows all past executions with status, duration, record counts, and error messages.
 
 **Dashboard** shows aggregate stats: total runs, success/failure rates, records migrated, and charts of recent activity.
+
+---
+
+## Running Tests
+
+### Backend (pytest)
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m pytest -v
+```
+
+Database detection mirrors `start.sh`: tests use PostgreSQL if a `backend/.env` file exists or if `pg_isready` succeeds, otherwise they use in-memory SQLite. When PostgreSQL is used, tests run against a separate `sdf_test` database (auto-created if needed) so your development data is never affected.
+
+### Frontend (Vitest)
+
+```bash
+cd ui
+npx vitest run
+```
+
+Or run in watch mode during development:
+
+```bash
+cd ui
+npx vitest
+```
 
 ---
 
