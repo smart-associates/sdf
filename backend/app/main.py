@@ -32,6 +32,9 @@ async def run_migrations():
     from sqlalchemy import text
     from sqlalchemy.exc import ProgrammingError
 
+    if engine.dialect.name == "sqlite":
+        return
+
     logger = logging.getLogger(__name__)
     migrations = [
         "ALTER TABLE job_execution_tables ADD COLUMN estimated_row_count INTEGER",
