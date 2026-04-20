@@ -3,7 +3,10 @@ services:
     image: smartassociates/sdf:${SDF_IMAGE_TAG:-latest}
     # `build:` is kept so developers can `docker compose up --build` from source.
     # End users without the source tree can just `docker compose pull && docker compose up`.
-    build: .
+    # Defaults to no_cache=true for clean rebuilds; set SDF_NO_CACHE=false to reuse layer cache.
+    build:
+      context: .
+      no_cache: ${SDF_NO_CACHE:-true}
     pull_policy: missing
     # Host networking lets the container reach PostgreSQL on the host's 127.0.0.1
     # without requiring listen_addresses or pg_hba changes for the docker bridge.
