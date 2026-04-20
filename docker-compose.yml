@@ -5,14 +5,14 @@ services:
     # End users without the source tree can just `docker compose pull && docker compose up`.
     build: .
     pull_policy: missing
-    ports:
-      - "8000:8000"
-    extra_hosts:
-      # Lets the container reach the host's localhost on Linux.
-      # Mac/Windows Docker Desktop already resolves host.docker.internal.
-      - "host.docker.internal:host-gateway"
+    # Host networking lets the container reach PostgreSQL on the host's 127.0.0.1
+    # without requiring listen_addresses or pg_hba changes for the docker bridge.
+    # The app binds 0.0.0.0:8000 directly on the host, so port publishing is not needed.
+    # On Linux this works out of the box; on Docker Desktop (macOS/Windows) it
+    # requires enabling "Host networking" in Settings → Resources → Network.
+    network_mode: host
     environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_HOST: ${POSTGRES_HOST:-127.0.0.1}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}

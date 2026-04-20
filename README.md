@@ -47,9 +47,13 @@ git clone git@github.com:smart-associates/sdf.git && cd sdf
 docker compose pull && docker compose up
 ```
 
-The container auto-detects PostgreSQL on the host (`host.docker.internal:5432`). If none is
-reachable it falls back to an in-container SQLite database (ephemeral — no persistence).
-Override via env vars (see [GETTING_STARTED.md](GETTING_STARTED.md#option-2-docker-compose)).
+The compose file uses `network_mode: host`, so the container auto-detects PostgreSQL on the
+host's `127.0.0.1:5432`. If none is reachable it falls back to an in-container SQLite
+database (ephemeral — no persistence). Override via env vars (see
+[GETTING_STARTED.md](GETTING_STARTED.md#option-2-docker-compose)).
+
+> **macOS/Windows:** enable host networking in Docker Desktop under
+> **Settings → Resources → Network**. Linux works out of the box.
 
 Pin a specific version: `SDF_IMAGE_TAG=1.2.0 docker compose up`.
 
@@ -65,13 +69,12 @@ docker compose up                              # no rebuild, no pull — uses th
 git clone git@github.com:smart-associates/sdf.git && cd sdf
 docker build -t sdf:local .
 
-docker run --rm -p 8000:8000 \
-  --add-host=host.docker.internal:host-gateway \
+docker run --rm --network=host \
   -e ENCRYPTION_KEY="$(openssl rand -hex 16)" \
   sdf:local
 ```
 
-The `--add-host` flag is only needed on Linux — it wires `host.docker.internal` to the host gateway so the container can auto-detect a host PostgreSQL. Docker Desktop (macOS/Windows) resolves it automatically.
+`--network=host` lets the container reach a host PostgreSQL on `127.0.0.1` and binds port 8000 directly on the host. On Docker Desktop (macOS/Windows) enable host networking in Settings first.
 
 **Local dev (non-Docker):**
 ```bash

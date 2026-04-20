@@ -59,31 +59,27 @@ docker build \
 
 **Run the image:**
 ```bash
-docker run --rm -p 8000:8000 \
-  --add-host=host.docker.internal:host-gateway \
+docker run --rm --network=host \
   -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
   sdf:local
 ```
 
 Or run the published image without building anything:
 ```bash
-docker run --rm -p 8000:8000 \
-  --add-host=host.docker.internal:host-gateway \
+docker run --rm --network=host \
   -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
   smartassociates/sdf:latest
 ```
 
 Flags explained:
-- `-p 8000:8000` — publish the app port.
-- `--add-host=host.docker.internal:host-gateway` — **Linux only.** Lets the container reach the host's `localhost` so it can probe your host PostgreSQL. Docker Desktop (macOS/Windows) resolves `host.docker.internal` natively and ignores this flag.
+- `--network=host` — share the host's network namespace. Port 8000 is bound directly on the host (no `-p` needed) and the container can reach a host PostgreSQL on `127.0.0.1`. On Docker Desktop (macOS/Windows) this requires enabling host networking in **Settings → Resources → Network**.
 - `-e ENCRYPTION_KEY=...` — stable secret used to encrypt stored DB passwords. Keep it constant across runs or previously-saved credentials become unreadable.
 
-Pass any of the `POSTGRES_*` env vars (see table below) with additional `-e` flags to override detection.
+Pass any of the `POSTGRES_*` env vars (see table below) with additional `-e` flags to override detection, e.g. `-e POSTGRES_USER=shaneel -e POSTGRES_PASSWORD=...`.
 
 To run detached with a healthcheck-visible name:
 ```bash
-docker run -d --name sdf -p 8000:8000 \
-  --add-host=host.docker.internal:host-gateway \
+docker run -d --name sdf --network=host \
   -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
   smartassociates/sdf:latest
 
@@ -104,13 +100,15 @@ Each published release is also tagged by its git sha (e.g. `smartassociates/sdf:
 
 ### How the container finds PostgreSQL
 
-By default the container probes `host.docker.internal:5432` as user `postgres` on database `sdf`. On Linux the compose file already wires `host.docker.internal` to the host gateway (`extra_hosts`), so no runtime flags are needed. On macOS/Windows Docker Desktop this resolves automatically.
+The compose file sets `network_mode: host`, so the container shares the host's network namespace. That means `127.0.0.1` inside the container is the host's loopback — the same interface a local Postgres is almost always bound to. No `extra_hosts`, no NAT layer, no `-p` flag.
 
-Override any of the following via shell env or a `.env` file at the repo root:
+On Docker Desktop (macOS/Windows), host networking is available but opt-in: **Settings → Resources → Network → Enable host networking**. On plain Linux it works out of the box.
+
+By default the container probes `127.0.0.1:5432` as user `postgres` on database `sdf`. Override any of the following via shell env or a `.env` file at the repo root:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `POSTGRES_HOST` | `host.docker.internal` | Hostname for the probe |
+| `POSTGRES_HOST` | `127.0.0.1` | Hostname for the probe |
 | `POSTGRES_PORT` | `5432` | Port for the probe |
 | `POSTGRES_USER` | `postgres` | User for the probe |
 | `POSTGRES_PASSWORD` | _(empty)_ | Password for the probe |
@@ -118,7 +116,23 @@ Override any of the following via shell env or a `.env` file at the repo root:
 | `DATABASE_URL` | _(unset)_ | If set, skips auto-detection entirely |
 | `ENCRYPTION_KEY` | placeholder | **Set this to a stable 32-char string in production** |
 
-If probe fails, the container uses `sqlite:////tmp/sdf.db` — fine for evaluation, but data is lost when the container exits. For persistent usage, run a PostgreSQL on your host or pass `DATABASE_URL`.
+The probe requires TCP access and an auth method the container can satisfy. Most distro Postgres setups ship with `pg_hba.conf` requiring `md5`/`scram-sha-256` for loopback TCP — set `POSTGRES_PASSWORD` accordingly. For a single-user dev laptop you can swap those lines for `trust` and skip the password:
+```
+# /var/lib/pgsql/data/pg_hba.conf
+host  all  all  127.0.0.1/32  trust
+host  all  all  ::1/128       trust
+```
+Then `sudo systemctl reload postgresql`.
+
+If probe fails, the container uses `sqlite:////tmp/sdf.db` — fine for evaluation, but data is lost when the container exits. For persistent usage, fix the PG path above or pass `DATABASE_URL`.
+
+### A note on `network_mode: host`
+
+With host networking the container binds port 8000 directly on the host (no `-p 8000:8000` needed or honored). That means:
+
+- The app is reachable on every interface the host has — loopback, LAN, public. Same practical reachability as a published port, but the host's firewall is the only gate (no docker iptables NAT rules).
+- If anything else on the host already owns `:8000`, the container fails to start.
+- You can't pin to a specific interface via compose; uvicorn binds `0.0.0.0`. For localhost-only, put a firewall rule in front.
 
 ---
 
@@ -287,7 +301,7 @@ You can add additional custom settings via the Settings page or the `/api/settin
 
 **"Connection refused" when testing a connection**
 - Verify host/port are reachable from the machine running the backend.
-- In Docker mode, use `host.docker.internal` (not `localhost`) to reach services running on the host. The compose file already wires this for Linux.
+- In Docker mode the container uses host networking, so `127.0.0.1` inside the container is the host's loopback. If a remote DB is still unreachable, check your `pg_hba.conf` auth rules and whether the firewall allows port 8000/5432 as needed.
 
 **Job fails immediately with permission error**
 - The database user needs SELECT on source tables and INSERT/CREATE on target tables.
