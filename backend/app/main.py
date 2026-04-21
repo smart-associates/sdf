@@ -77,25 +77,28 @@ async def recover_stale_executions():
     logger = logging.getLogger(__name__)
     async with engine.begin() as conn:
         result = await conn.execute(text(
+            "SELECT id FROM job_executions WHERE status = 'running'"
+        ))
+        exec_ids = [r[0] for r in result.fetchall()]
+        if not exec_ids:
+            return
+        logger.warning("Recovered %d stale execution(s): %s", len(exec_ids), exec_ids)
+        update_exec = text(
             """UPDATE job_executions
                SET status = 'failed',
                    completed_at = CURRENT_TIMESTAMP,
                    error_message = 'Process restarted while execution was running'
-               WHERE status = 'running'
-               RETURNING id"""
-        ))
-        rows = result.fetchall()
-        if rows:
-            exec_ids = [r[0] for r in rows]
-            logger.warning("Recovered %d stale execution(s): %s", len(exec_ids), exec_ids)
-            stmt = text(
-                """UPDATE job_execution_tables
-                   SET status = 'failed',
-                       completed_at = CURRENT_TIMESTAMP
-                   WHERE execution_id IN :ids
-                     AND status = 'running'"""
-            ).bindparams(bindparam("ids", expanding=True))
-            await conn.execute(stmt, {"ids": exec_ids})
+               WHERE id IN :ids"""
+        ).bindparams(bindparam("ids", expanding=True))
+        await conn.execute(update_exec, {"ids": exec_ids})
+        update_tables = text(
+            """UPDATE job_execution_tables
+               SET status = 'failed',
+                   completed_at = CURRENT_TIMESTAMP
+               WHERE execution_id IN :ids
+                 AND status = 'running'"""
+        ).bindparams(bindparam("ids", expanding=True))
+        await conn.execute(update_tables, {"ids": exec_ids})
 
 
 async def seed_defaults():
