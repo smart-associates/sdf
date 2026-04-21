@@ -5,7 +5,11 @@ FROM node:20-alpine AS ui-build
 WORKDIR /ui
 
 COPY ui/package.json ui/package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# node:20-alpine ships npm 10.8.2, which rejects this lockfile's
+# platform-specific optional deps ("Missing: @emnapi/core from lock file").
+# Pin npm to the version used to regenerate the lockfile so rebuilds are
+# reproducible — bumping npm here means also regenerating package-lock.json.
+RUN npm install -g npm@11.12.1 && npm ci --no-audit --no-fund
 
 COPY ui/ ./
 RUN npm run build

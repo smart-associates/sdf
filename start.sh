@@ -65,7 +65,7 @@ fi
 # Start frontend
 echo "Starting Vite frontend on :5173..."
 cd ui
-npm install -q
+npx --yes npm@11.12.1 ci --silent --no-audit --no-fund
 npm run dev -- --host &
 FRONTEND_PID=$!
 cd ..
