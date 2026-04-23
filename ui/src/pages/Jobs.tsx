@@ -7,6 +7,7 @@ import { getExecution, stopExecution } from '../api/executions'
 import StatusBadge from '../components/StatusBadge'
 import Modal from '../components/Modal'
 import SortableHeader from '../components/SortableHeader'
+import VendorIcon from '../components/VendorIcon'
 import { useSortableData } from '../hooks/useSortableData'
 
 const MIGRATION_MODES = ['append', 'truncate_load'] as const
@@ -97,6 +98,7 @@ export default function Jobs() {
   }
 
   const connName = (id: number) => connections.find(c => c.id === id)?.name || `#${id}`
+  const connType = (id: number) => connections.find(c => c.id === id)?.db_type
 
   const jobKeyExtractors = useMemo(() => ({
     source: (j: Job) => connName(j.source_connection_id),
@@ -136,8 +138,22 @@ export default function Jobs() {
             {sortedJobs.map(j => (
               <tr key={j.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium">{j.name}</td>
-                <td className="px-4 py-3 text-gray-600">{connName(j.source_connection_id)}</td>
-                <td className="px-4 py-3 text-gray-600">{connName(j.target_connection_id)}</td>
+                <td className="px-4 py-3 text-gray-600">
+                  <div className="flex items-center gap-2">
+                    {connType(j.source_connection_id) && (
+                      <VendorIcon type={connType(j.source_connection_id)!} size={16} className="shrink-0" />
+                    )}
+                    <span className="truncate">{connName(j.source_connection_id)}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-gray-600">
+                  <div className="flex items-center gap-2">
+                    {connType(j.target_connection_id) && (
+                      <VendorIcon type={connType(j.target_connection_id)!} size={16} className="shrink-0" />
+                    )}
+                    <span className="truncate">{connName(j.target_connection_id)}</span>
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-xs text-gray-500 capitalize">{j.migration_mode.replace('_', ' ')}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2 justify-end">
