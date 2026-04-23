@@ -38,6 +38,18 @@ Open [http://localhost:8000](http://localhost:8000). API docs at [http://localho
 
 To stop: `Ctrl+C`, then `docker compose down`.
 
+### Restart policy
+
+The `sdf` service is configured with `restart: unless-stopped`, so Docker will bring the container back automatically after a host reboot or daemon restart. The only things that keep it stopped are an explicit `docker compose down` / `docker compose stop`, or repeated startup failures. Detached mode (`docker compose up -d`) plus this policy means the container survives terminal logout, SSH disconnect, and host reboot.
+
+### Logs
+
+The `sdf` service is configured with Docker's `local` log driver and rotation (`max-size: 10m`, `max-file: 5`) — container logs are capped at ~50 MB per container lifetime, which matters when running detached (`docker compose up -d`) over long periods. Tail with:
+
+```bash
+docker compose logs -f sdf
+```
+
 ### Option 1b: Plain `docker build` + `docker run`
 
 If you'd rather not use Compose, the same workflow works with plain Docker commands.
