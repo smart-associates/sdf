@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Plug } from 'lucide-react'
 import {
   getConnections, createConnection, updateConnection,
-  deleteConnection, testConnection, DatabaseConnection
+  deleteConnection, testConnection, cloneConnection, DatabaseConnection
 } from '../api/connections'
 import Modal from '../components/Modal'
 import ConnectionCard from '../components/ConnectionCard'
@@ -53,6 +53,12 @@ export default function Connections() {
     },
   })
 
+  const cloneMut = useMutation({
+    mutationFn: cloneConnection,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
+    onError: (e: any) => alert(e.response?.data?.detail || 'Clone failed'),
+  })
+
   const openCreate = () => { setForm(empty()); setError(''); setTestResult(null); createMut.reset(); updateMut.reset(); setModal('create') }
   const openEdit = (c: DatabaseConnection) => { setForm({ ...c, password: '********' }); setError(''); setTestResult(null); createMut.reset(); updateMut.reset(); setModal('edit') }
 
@@ -95,6 +101,7 @@ export default function Connections() {
               connection={c}
               onEdit={() => openEdit(c)}
               onTest={() => testMut.mutate(c.id)}
+              onClone={() => cloneMut.mutate(c.id)}
               onDelete={() => deleteMut.mutate(c.id)}
               testing={testMut.isPending && testMut.variables === c.id}
             />

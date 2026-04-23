@@ -52,3 +52,6 @@ export const validateJob = (id: number) =>
 
 export const executeJob = (id: number) =>
   client.post<JobExecuteResult>(`/jobs/${id}/execute`).then(r => r.data)
+
+export const cloneJob = (id: number) =>
+  client.post<Job>(`/jobs/${id}/clone`).then(r => r.data)

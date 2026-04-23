@@ -1,7 +1,7 @@
 import { Fragment, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Edit2, Play, CheckCircle, Square } from 'lucide-react'
-import { getJobs, createJob, updateJob, deleteJob, validateJob, executeJob, Job } from '../api/jobs'
+import { Plus, Trash2, Edit2, Play, CheckCircle, Square, Copy } from 'lucide-react'
+import { getJobs, createJob, updateJob, deleteJob, validateJob, executeJob, cloneJob, Job } from '../api/jobs'
 import { getConnections } from '../api/connections'
 import { getExecution, stopExecution } from '../api/executions'
 import StatusBadge from '../components/StatusBadge'
@@ -89,6 +89,12 @@ export default function Jobs() {
     onError: (e: any) => alert(e.response?.data?.detail || 'Stop failed'),
   })
 
+  const cloneMut = useMutation({
+    mutationFn: cloneJob,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+    onError: (e: any) => alert(e.response?.data?.detail || 'Clone failed'),
+  })
+
   const openCreate = () => { setForm(empty()); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('create') }
   const openEdit = (j: Job) => { setForm({ ...j }); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('edit') }
 
@@ -171,10 +177,13 @@ export default function Jobs() {
                         <Play size={15} />
                       </button>
                     )}
-                    <button onClick={() => openEdit(j)} className="p-1 text-gray-400 hover:text-blue-600">
+                    <button onClick={() => openEdit(j)} className="p-1 text-gray-400 hover:text-blue-600" title="Edit">
                       <Edit2 size={15} />
                     </button>
-                    <button onClick={() => { if (confirm('Delete job?')) deleteMut.mutate(j.id) }} className="p-1 text-gray-400 hover:text-red-600">
+                    <button onClick={() => cloneMut.mutate(j.id)} className="p-1 text-gray-400 hover:text-blue-600" title="Clone">
+                      <Copy size={15} />
+                    </button>
+                    <button onClick={() => { if (confirm('Delete job?')) deleteMut.mutate(j.id) }} className="p-1 text-gray-400 hover:text-red-600" title="Delete">
                       <Trash2 size={15} />
                     </button>
                   </div>

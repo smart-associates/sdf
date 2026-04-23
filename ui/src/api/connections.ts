@@ -39,3 +39,6 @@ export const deleteConnection = (id: number) =>
 
 export const testConnection = (id: number) =>
   client.post<ConnectionTestResult>(`/connections/${id}/test`).then(r => r.data)
+
+export const cloneConnection = (id: number) =>
+  client.post<DatabaseConnection>(`/connections/${id}/clone`).then(r => r.data)

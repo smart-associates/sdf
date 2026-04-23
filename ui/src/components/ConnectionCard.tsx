@@ -1,4 +1,4 @@
-import { Edit2, Plug, Trash2 } from 'lucide-react'
+import { Copy, Edit2, Plug, Trash2 } from 'lucide-react'
 import { DatabaseConnection } from '../api/connections'
 import StatusBadge from './StatusBadge'
 import VendorIcon, { VENDOR_LABEL } from './VendorIcon'
@@ -7,11 +7,12 @@ interface Props {
   connection: DatabaseConnection
   onEdit: () => void
   onTest: () => void
+  onClone: () => void
   onDelete: () => void
   testing?: boolean
 }
 
-export default function ConnectionCard({ connection: c, onEdit, onTest, onDelete, testing }: Props) {
+export default function ConnectionCard({ connection: c, onEdit, onTest, onClone, onDelete, testing }: Props) {
   const isFs = c.db_type === 'filesystem'
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -82,6 +83,13 @@ export default function ConnectionCard({ connection: c, onEdit, onTest, onDelete
             title="Edit"
           >
             <Edit2 size={15} />
+          </button>
+          <button
+            onClick={stop(onClone)}
+            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-gray-50 rounded"
+            title="Clone"
+          >
+            <Copy size={15} />
           </button>
           <button
             onClick={stop(() => { if (confirm('Delete connection?')) onDelete() })}

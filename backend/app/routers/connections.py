@@ -46,3 +46,10 @@ async def test_connection(conn_id: int, db: AsyncSession = Depends(get_db)):
         return result
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+@router.post("/{conn_id}/clone", response_model=DatabaseConnectionResponse, status_code=201)
+async def clone_connection(conn_id: int, db: AsyncSession = Depends(get_db)):
+    clone = await svc.clone_connection(db, conn_id)
+    if not clone:
+        raise HTTPException(404, "Connection not found")
+    return clone

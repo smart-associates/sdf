@@ -7,6 +7,7 @@ from sqlalchemy import select
 from datetime import datetime, timezone
 from app.models.connection import DatabaseConnection
 from app.services.encryption import encrypt, decrypt, mask, is_masked, MASKED, DecryptionError
+from app.services.clone_utils import next_copy_name
 
 DEFAULT_PORTS = {"postgresql": 5432, "mysql": 3306, "mssql": 1433}
 _DRIVERS = {
@@ -89,6 +90,29 @@ async def update_connection(db: AsyncSession, conn_id: int, data: dict) -> Optio
     await db.refresh(conn)
     conn.password = MASKED
     return conn
+
+
+async def clone_connection(db: AsyncSession, conn_id: int) -> Optional[DatabaseConnection]:
+    result = await db.execute(select(DatabaseConnection).where(DatabaseConnection.id == conn_id))
+    source = result.scalar_one_or_none()
+    if not source:
+        return None
+    new_name = await next_copy_name(db, DatabaseConnection, source.name)
+    clone = DatabaseConnection(
+        name=new_name,
+        db_type=source.db_type,
+        host=source.host,
+        port=source.port,
+        database=source.database,
+        username=source.username,
+        password=source.password,
+        staging_format=source.staging_format,
+    )
+    db.add(clone)
+    await db.commit()
+    await db.refresh(clone)
+    clone.password = MASKED
+    return clone
 
 
 async def delete_connection(db: AsyncSession, conn_id: int) -> bool:

@@ -11,6 +11,7 @@ from app.schemas.job import JobCreate, JobUpdate, JobResponse, JobValidationResp
 from app.services.job_runner import start_job_execution, stop_execution
 from app.services.encryption import decrypt
 from app.services.migration_engine import build_engine, table_exists, csv_table_exists, parquet_table_exists, avro_table_exists
+from app.services.clone_utils import next_copy_name
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -211,6 +212,29 @@ async def execute_job(job_id: int, db: AsyncSession = Depends(get_db)):
         status=execution.status,
         started_at=execution.started_at
     )
+
+
+@router.post("/{job_id}/clone", response_model=JobResponse, status_code=201)
+async def clone_job(job_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    source = result.scalar_one_or_none()
+    if not source:
+        raise HTTPException(404, "Job not found")
+    new_name = await next_copy_name(db, Job, source.name)
+    clone = Job(
+        name=new_name,
+        source_connection_id=source.source_connection_id,
+        source_tables=source.source_tables,
+        table_filter=source.table_filter,
+        target_connection_id=source.target_connection_id,
+        target_schema=source.target_schema,
+        create_target_table=source.create_target_table,
+        migration_mode=source.migration_mode,
+    )
+    db.add(clone)
+    await db.commit()
+    await db.refresh(clone)
+    return clone
 
 
 @router.post("/{job_id}/executions/{execution_id}/stop", status_code=200)
