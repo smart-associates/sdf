@@ -13,6 +13,7 @@ from app.models.job import Job, JobExecution, JobExecutionTable
 from app.models.connection import DatabaseConnection
 from app.models.setting import Setting
 from app.services.encryption import decrypt
+from app.services.table_parser import parse_source_tables
 from app.services.migration_engine import (
     build_engine, create_target_table, migrate_table, table_exists,
     csv_table_exists, migrate_csv_to_db, migrate_db_to_csv, migrate_csv_to_csv,
@@ -220,8 +221,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
             tgt["username"], decrypt(tgt["password"] or "")
         )
 
-        tables_raw = job.get("source_tables") or ""
-        tables = [t.strip() for t in tables_raw.splitlines() if t.strip()]
+        tables = parse_source_tables(job.get("source_tables"))
         table_filter = job.get("table_filter") or None
         create_tgt = bool(job.get("create_target_table"))
         migration_mode = job.get("migration_mode") or "append"

@@ -241,7 +241,7 @@ For filesystem connections (CSV, Parquet, or Avro files), set **Database** to th
 Navigate to **Jobs** → **New Job**.
 
 - **Source Connection** — where data comes from
-- **Source Tables** — one table name per line (e.g. `public.orders`)
+- **Source Tables** — one table name per line (e.g. `public.orders`). Prefix a line with `#` to temporarily disable it without removing it.
 - **Table Filter** — optional WHERE clause applied to each table (e.g. `created_at > '2024-01-01'`)
 - **Target Connection** — where data goes
 - **Target Schema** — schema to write into on the target (leave blank to use default)

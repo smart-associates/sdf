@@ -257,8 +257,8 @@ export default function Jobs() {
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Tables (one per line, schema.table or table)</label>
-                <textarea rows={4} className="w-full border rounded-lg px-3 py-2 text-sm font-mono" placeholder="public.users&#10;public.orders&#10;public.products" value={form.source_tables || ''} onChange={e => setForm(f => ({ ...f, source_tables: e.target.value }))} />
+                <label className="block text-xs font-medium text-gray-700 mb-1">Tables (one per line, schema.table or table — prefix with # to disable)</label>
+                <textarea rows={4} className="w-full border rounded-lg px-3 py-2 text-sm font-mono" placeholder="public.users&#10;#public.orders&#10;public.products" value={form.source_tables || ''} onChange={e => setForm(f => ({ ...f, source_tables: e.target.value }))} />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-700 mb-1">Table Filter (WHERE clause, applied to all tables)</label>

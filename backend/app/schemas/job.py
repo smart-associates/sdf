@@ -14,8 +14,10 @@ class JobBase(BaseModel):
 
     @validator("source_tables")
     def source_tables_not_blank(cls, v):
-        if v is not None and not any(line.strip() for line in v.splitlines()):
-            raise ValueError("source_tables must contain at least one non-empty table name")
+        if v is None:
+            return v
+        if not any(line.strip() and not line.strip().startswith("#") for line in v.splitlines()):
+            raise ValueError("source_tables must contain at least one non-empty, non-comment table name")
         return v
 
 class JobCreate(JobBase):

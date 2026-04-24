@@ -12,6 +12,7 @@ from app.services.job_runner import start_job_execution, stop_execution
 from app.services.encryption import decrypt
 from app.services.migration_engine import build_engine, table_exists, csv_table_exists, parquet_table_exists, avro_table_exists
 from app.services.clone_utils import next_copy_name
+from app.services.table_parser import parse_source_tables
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -117,7 +118,7 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
     warnings = []
     valid = True
 
-    tables = [t.strip() for t in (job.source_tables or "").splitlines() if t.strip()]
+    tables = parse_source_tables(job.source_tables)
     if not tables:
         warnings.append("No source tables defined")
 
@@ -197,7 +198,7 @@ async def execute_job(job_id: int, db: AsyncSession = Depends(get_db)):
     if not job:
         raise HTTPException(404, "Job not found")
 
-    tables = [t.strip() for t in (job.source_tables or "").splitlines() if t.strip()]
+    tables = parse_source_tables(job.source_tables)
     if not tables:
         raise HTTPException(400, "Job has no source tables defined")
 
