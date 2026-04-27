@@ -277,7 +277,8 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 # Auto-create target table only applies to DB targets
                 if create_tgt and not tgt_is_file:
                     if not table_exists(tgt_engine, tgt_table, tgt_schema):
-                        create_target_table(src_engine, tgt_engine, src_table, tgt_table, src_schema, tgt_schema)
+                        create_target_table(src_engine, tgt_engine, src_table, tgt_table, src_schema, tgt_schema,
+                                            elog=elog, exec_table_id=exec_table_id)
                         elog.info("table_created", f"{table_entry}: target table created",
                                   exec_table_id=exec_table_id)
 
@@ -306,26 +307,33 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 elif src_type == "filesystem":
                     src_fmt = src.get("staging_format") or "parquet"
                     if src_fmt == "csv":
-                        count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
+                        count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb,
+                                                  elog=elog, exec_table_id=exec_table_id)
                     elif src_fmt == "avro":
-                        count = migrate_avro_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
+                        count = migrate_avro_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb,
+                                                   elog=elog, exec_table_id=exec_table_id)
                     else:
-                        count = migrate_parquet_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb)
+                        count = migrate_parquet_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb,
+                                                      elog=elog, exec_table_id=exec_table_id)
                 elif tgt_type == "filesystem":
                     tgt_fmt = tgt.get("staging_format") or "parquet"
                     if tgt_fmt == "csv":
-                        count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb, batch_size, csv_quoting=csv_quoting, csv_delimiter=csv_delimiter, include_header=csv_header)
+                        count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb, batch_size, csv_quoting=csv_quoting, csv_delimiter=csv_delimiter, include_header=csv_header,
+                                                  elog=elog, exec_table_id=exec_table_id)
                     elif tgt_fmt == "avro":
-                        count = migrate_db_to_avro(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb)
+                        count = migrate_db_to_avro(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb,
+                                                   elog=elog, exec_table_id=exec_table_id)
                     else:
-                        count = migrate_db_to_parquet(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb)
+                        count = migrate_db_to_parquet(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb,
+                                                      elog=elog, exec_table_id=exec_table_id)
                 else:
                     count = migrate_table(
                         src_engine, tgt_engine,
                         src_table, tgt_table,
                         src_schema, tgt_schema,
                         table_filter, migration_mode, batch_size,
-                        progress_cb
+                        progress_cb,
+                        elog=elog, exec_table_id=exec_table_id,
                     )
 
                 total_records += count

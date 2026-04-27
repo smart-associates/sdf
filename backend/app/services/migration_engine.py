@@ -8,10 +8,23 @@ from sqlalchemy import inspect, text, MetaData, Table, Column
 from sqlalchemy import String, Text, Integer, BigInteger, Float, Double, Numeric, Boolean, Date, DateTime
 from sqlalchemy.engine import Engine, URL
 from sqlalchemy.exc import OperationalError, DBAPIError
+from sqlalchemy.schema import CreateTable
 from typing import Callable, Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _log_sql(elog, exec_table_id, kind: str, summary: str, sql: str, **extra):
+    """Emit a detail-level log entry for a structural SQL statement.
+
+    Per-batch INSERTs are intentionally never routed through this helper.
+    """
+    if elog is None:
+        return
+    elog.detail("sql_executed", summary,
+                exec_table_id=exec_table_id,
+                sql=sql, sql_kind=kind, **extra)
 
 _DRIVERS = {
     "postgresql": "postgresql+psycopg2",
@@ -280,7 +293,8 @@ def reflect_table(engine: Engine, table_name: str, schema: Optional[str] = None)
 @_sanitize_exc
 def create_target_table(src_engine: Engine, tgt_engine: Engine,
                          src_table: str, tgt_table: str,
-                         src_schema: Optional[str], tgt_schema: Optional[str]):
+                         src_schema: Optional[str], tgt_schema: Optional[str],
+                         elog=None, exec_table_id=None):
     """Reflect source table, map types, create on target."""
     src = reflect_table(src_engine, src_table, src_schema)
     tgt_meta = MetaData()
@@ -288,6 +302,10 @@ def create_target_table(src_engine: Engine, tgt_engine: Engine,
     for col in src.columns:
         cols.append(Column(col.name, to_generic_type(col.type), nullable=col.nullable))
     tgt = Table(tgt_table, tgt_meta, *cols, schema=tgt_schema)
+    tgt_full = _full_table(tgt_schema, tgt_table, tgt_engine.dialect.name)
+    ddl = str(CreateTable(tgt).compile(dialect=tgt_engine.dialect)).strip()
+    _log_sql(elog, exec_table_id, "create_table",
+             f"CREATE TABLE {tgt_full}", ddl, target=tgt_full)
     tgt_meta.create_all(tgt_engine)
 
 
@@ -309,6 +327,8 @@ def migrate_table(
     migration_mode: str,
     batch_size: int,
     progress_cb: Optional[Callable[[int], None]] = None,
+    elog=None,
+    exec_table_id=None,
 ) -> int:
     """Migrate one table. Returns total record count."""
     src_dialect = src_engine.dialect.name
@@ -320,8 +340,14 @@ def migrate_table(
         query += f" WHERE {_validate_filter(table_filter)}"
 
     if migration_mode == "truncate_load":
+        truncate_sql = f"TRUNCATE TABLE {tgt_full}"
+        _log_sql(elog, exec_table_id, "truncate",
+                 truncate_sql, truncate_sql, target=tgt_full)
         with tgt_engine.begin() as tgt_conn:
-            tgt_conn.execute(text(f"TRUNCATE TABLE {_full_table(tgt_schema, tgt_table, tgt_engine.dialect.name)}"))
+            tgt_conn.execute(text(truncate_sql))
+
+    _log_sql(elog, exec_table_id, "select",
+             f"SELECT FROM {src_full}", query, source=src_full)
 
     total = 0
     with src_engine.connect() as src_conn:
@@ -405,6 +431,8 @@ def migrate_parquet_to_db(
     migration_mode: str,
     batch_size: int,
     progress_cb: Optional[Callable[[int], None]] = None,
+    elog=None,
+    exec_table_id=None,
 ) -> int:
     """Read a Parquet file and insert rows into a target DB table."""
     import pyarrow.parquet as pq
@@ -416,8 +444,11 @@ def migrate_parquet_to_db(
     dialect = tgt_engine.dialect.name
     tgt_full = _full_table(tgt_schema, tgt_table, dialect)
     if migration_mode == "truncate_load":
+        truncate_sql = f"TRUNCATE TABLE {tgt_full}"
+        _log_sql(elog, exec_table_id, "truncate",
+                 truncate_sql, truncate_sql, target=tgt_full)
         with tgt_engine.begin() as conn:
-            conn.execute(text(f"TRUNCATE TABLE {tgt_full}"))
+            conn.execute(text(truncate_sql))
 
     pf = pq.ParquetFile(path)
     cols = pf.schema_arrow.names
@@ -444,6 +475,8 @@ def migrate_db_to_parquet(
     table_filter: Optional[str],
     migration_mode: str,
     progress_cb: Optional[Callable[[int], None]] = None,
+    elog=None,
+    exec_table_id=None,
 ) -> int:
     """Stream rows from a source DB table and write to a Parquet file."""
     import pyarrow as pa
@@ -456,6 +489,9 @@ def migrate_db_to_parquet(
 
     os.makedirs(tgt_dir, exist_ok=True)
     path = _parquet_path(tgt_dir, tgt_table)
+
+    _log_sql(elog, exec_table_id, "select",
+             f"SELECT FROM {src_full}", query, source=src_full)
 
     total = 0
     writer = None
@@ -609,6 +645,8 @@ def migrate_csv_to_db(
     migration_mode: str,
     batch_size: int,
     progress_cb: Optional[Callable[[int], None]] = None,
+    elog=None,
+    exec_table_id=None,
 ) -> int:
     """Read a CSV file and insert rows into a target DB table."""
     path = _csv_path(src_dir, src_table)
@@ -618,8 +656,11 @@ def migrate_csv_to_db(
     dialect = tgt_engine.dialect.name
     tgt_full = _full_table(tgt_schema, tgt_table, dialect)
     if migration_mode == "truncate_load":
+        truncate_sql = f"TRUNCATE TABLE {tgt_full}"
+        _log_sql(elog, exec_table_id, "truncate",
+                 truncate_sql, truncate_sql, target=tgt_full)
         with tgt_engine.begin() as conn:
-            conn.execute(text(f"TRUNCATE TABLE {tgt_full}"))
+            conn.execute(text(truncate_sql))
 
     total = 0
     with open(path, newline="", encoding="utf-8") as f:
@@ -656,6 +697,8 @@ def migrate_db_to_csv(
     csv_quoting: str = "none",
     csv_delimiter: str = ",",
     include_header: bool = True,
+    elog=None,
+    exec_table_id=None,
 ) -> int:
     """Stream rows from a source DB table and write to a CSV file."""
     src_full = _full_table(src_schema, src_table, src_engine.dialect.name)
@@ -667,6 +710,9 @@ def migrate_db_to_csv(
     path = _csv_path(tgt_dir, tgt_table)
     append_mode = migration_mode == "append" and os.path.isfile(path)
     file_mode = "a" if append_mode else "w"
+
+    _log_sql(elog, exec_table_id, "select",
+             f"SELECT FROM {src_full}", query, source=src_full)
 
     total = 0
     with src_engine.connect() as src_conn:
@@ -817,6 +863,8 @@ def migrate_avro_to_db(
     migration_mode: str,
     batch_size: int,
     progress_cb: Optional[Callable[[int], None]] = None,
+    elog=None,
+    exec_table_id=None,
 ) -> int:
     """Read an Avro file and insert rows into a target DB table."""
     import fastavro
@@ -828,8 +876,11 @@ def migrate_avro_to_db(
     dialect = tgt_engine.dialect.name
     tgt_full = _full_table(tgt_schema, tgt_table, dialect)
     if migration_mode == "truncate_load":
+        truncate_sql = f"TRUNCATE TABLE {tgt_full}"
+        _log_sql(elog, exec_table_id, "truncate",
+                 truncate_sql, truncate_sql, target=tgt_full)
         with tgt_engine.begin() as conn:
-            conn.execute(text(f"TRUNCATE TABLE {tgt_full}"))
+            conn.execute(text(truncate_sql))
 
     total = 0
     with open(path, "rb") as f:
@@ -864,6 +915,8 @@ def migrate_db_to_avro(
     table_filter: Optional[str],
     migration_mode: str,
     progress_cb: Optional[Callable[[int], None]] = None,
+    elog=None,
+    exec_table_id=None,
 ) -> int:
     """Stream rows from a source DB table and write to an Avro file."""
     import fastavro
@@ -875,6 +928,9 @@ def migrate_db_to_avro(
 
     os.makedirs(tgt_dir, exist_ok=True)
     path = _avro_path(tgt_dir, tgt_table)
+
+    _log_sql(elog, exec_table_id, "select",
+             f"SELECT FROM {src_full}", query, source=src_full)
 
     total = 0
     with src_engine.connect() as src_conn:
