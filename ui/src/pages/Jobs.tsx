@@ -284,7 +284,7 @@ export default function Jobs() {
       )}
 
       {modal === 'execution' && (
-        <Modal title={execStatus ? `Execution #${execStatus.id}` : 'Starting execution…'} onClose={() => setModal(null)} size="lg">
+        <Modal title={execStatus ? `Execution #${execStatus.id}` : 'Starting execution…'} onClose={() => setModal(null)} size="xl">
           {execError ? (
             <div className="py-10 text-center text-red-500 text-sm">Failed to load execution status</div>
           ) : !execStatus ? (
