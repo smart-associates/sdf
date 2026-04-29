@@ -59,6 +59,9 @@ async def run_migrations():
            )""",
         "CREATE INDEX IF NOT EXISTS ix_job_execution_logs_execution_id ON job_execution_logs (execution_id)",
         "CREATE INDEX IF NOT EXISTS ix_job_execution_logs_exec_table_id ON job_execution_logs (exec_table_id)",
+        "ALTER TABLE job_executions ALTER COLUMN record_count TYPE BIGINT",
+        "ALTER TABLE job_execution_tables ALTER COLUMN record_count TYPE BIGINT",
+        "ALTER TABLE job_execution_tables ALTER COLUMN estimated_row_count TYPE BIGINT",
     ]
     for stmt in migrations:
         try:

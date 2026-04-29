@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Boolean, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Text, ForeignKey, Boolean, JSON
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -25,7 +25,7 @@ class JobExecution(Base):
     status = Column(String(50), nullable=False, default="running")  # running|success|failed
     started_at = Column(DateTime(timezone=True), nullable=False)
     completed_at = Column(DateTime(timezone=True))
-    record_count = Column(Integer, default=0)
+    record_count = Column(BigInteger, default=0)
     error_message = Column(Text)
 
 class JobExecutionTable(Base):
@@ -37,8 +37,8 @@ class JobExecutionTable(Base):
     status = Column(String(50), nullable=False, default="running")
     started_at = Column(DateTime(timezone=True), nullable=False)
     completed_at = Column(DateTime(timezone=True))
-    record_count = Column(Integer, default=0)
-    estimated_row_count = Column(Integer)  # stats-based estimate, may be None
+    record_count = Column(BigInteger, default=0)
+    estimated_row_count = Column(BigInteger)  # stats-based estimate, may be None
     error_message = Column(Text)
 
 class JobExecutionLog(Base):
