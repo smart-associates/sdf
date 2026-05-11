@@ -47,22 +47,27 @@ async def _load_execution(db: AsyncSession, exec_id: int) -> Optional[JobExecuti
 
 
 @router.get("/stats", response_model=ExecutionStatsResponse)
-async def get_stats(db: AsyncSession = Depends(get_db)):
-    stats_result = await db.execute(
-        select(
-            func.count().label("total"),
-            func.count().filter(JobExecution.status == "success").label("success"),
-            func.count().filter(JobExecution.status == "failed").label("failed"),
-            func.count().filter(JobExecution.status == "running").label("running"),
-            func.coalesce(func.sum(JobExecution.record_count), 0).label("total_recs"),
-        ).select_from(JobExecution)
-    )
-    stats = stats_result.one()
+async def get_stats(
+    days: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days) if days else None
 
-    recent_result = await db.execute(
-        select(JobExecution).order_by(JobExecution.id.desc()).limit(10)
-    )
-    recent_execs = recent_result.scalars().all()
+    stats_q = select(
+        func.count().label("total"),
+        func.count().filter(JobExecution.status == "success").label("success"),
+        func.count().filter(JobExecution.status == "failed").label("failed"),
+        func.count().filter(JobExecution.status == "running").label("running"),
+        func.coalesce(func.sum(JobExecution.record_count), 0).label("total_recs"),
+    ).select_from(JobExecution)
+    if cutoff is not None:
+        stats_q = stats_q.where(JobExecution.started_at >= cutoff)
+    stats = (await db.execute(stats_q)).one()
+
+    recent_q = select(JobExecution).order_by(JobExecution.id.desc()).limit(10)
+    if cutoff is not None:
+        recent_q = recent_q.where(JobExecution.started_at >= cutoff)
+    recent_execs = (await db.execute(recent_q)).scalars().all()
     exec_ids = [ex.id for ex in recent_execs]
     tables_map = await _batch_load_tables(db, exec_ids)
 

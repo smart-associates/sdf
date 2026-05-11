@@ -46,8 +46,8 @@ export interface LogEntry {
 export const getExecutionLogs = (execId: number) =>
   client.get<LogEntry[]>(`/executions/${execId}/logs`).then(r => r.data)
 
-export const getStats = () =>
-  client.get<ExecutionStats>('/executions/stats').then(r => r.data)
+export const getStats = (days?: number) =>
+  client.get<ExecutionStats>('/executions/stats', { params: { days } }).then(r => r.data)
 
 export const getExecution = (id: number) =>
   client.get<Execution>(`/executions/${id}`).then(r => r.data)

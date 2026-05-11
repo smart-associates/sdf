@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { getStats } from '../api/executions'
@@ -18,9 +19,10 @@ function StatCard({ label, value, sub }: { label: string; value: number | string
 }
 
 export default function Dashboard() {
+  const [filterDays, setFilterDays] = useState<number | ''>(7)
   const { data: stats, isLoading } = useQuery({
-    queryKey: ['stats'],
-    queryFn: getStats,
+    queryKey: ['stats', filterDays],
+    queryFn: () => getStats(filterDays ? +filterDays : undefined),
     refetchInterval: 10_000,
   })
   const { data: connections = [] } = useQuery({ queryKey: ['connections'], queryFn: getConnections })
@@ -52,9 +54,22 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-gray-500 text-sm mt-1">Data migration overview</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-gray-500 text-sm mt-1">Data migration overview</p>
+        </div>
+        <select
+          className="border rounded-lg px-3 py-2 text-sm"
+          value={filterDays}
+          onChange={e => setFilterDays(e.target.value ? +e.target.value : '')}
+        >
+          <option value="">All Time</option>
+          <option value="1">Last 1 Day</option>
+          <option value="7">Last 7 Days</option>
+          <option value="30">Last 30 Days</option>
+          <option value="90">Last 90 Days</option>
+        </select>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
