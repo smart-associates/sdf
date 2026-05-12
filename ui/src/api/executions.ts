@@ -28,6 +28,7 @@ export interface ExecutionStats {
   success_count: number
   failed_count: number
   running_count: number
+  cancelled_count: number
   total_records: number
   recent_executions: Execution[]
 }

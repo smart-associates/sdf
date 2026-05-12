@@ -6,7 +6,7 @@ import { getConnections } from '../api/connections'
 import { getJobs } from '../api/jobs'
 import StatusBadge from '../components/StatusBadge'
 
-const COLORS = { success: '#22c55e', failed: '#ef4444', running: '#3b82f6' }
+const COLORS = { success: '#22c55e', failed: '#ef4444', running: '#3b82f6', cancelled: '#eab308' }
 
 function StatCard({ label, value, sub }: { label: string; value: number | string; sub?: string }) {
   return (
@@ -33,6 +33,7 @@ export default function Dashboard() {
         { name: 'Success', value: stats.success_count, color: COLORS.success },
         { name: 'Failed', value: stats.failed_count, color: COLORS.failed },
         { name: 'Running', value: stats.running_count, color: COLORS.running },
+        { name: 'Cancelled', value: stats.cancelled_count, color: COLORS.cancelled },
       ].filter(d => d.value > 0)
     : []
 

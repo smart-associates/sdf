@@ -58,6 +58,7 @@ async def get_stats(
         func.count().filter(JobExecution.status == "success").label("success"),
         func.count().filter(JobExecution.status == "failed").label("failed"),
         func.count().filter(JobExecution.status == "running").label("running"),
+        func.count().filter(JobExecution.status == "cancelled").label("cancelled"),
         func.coalesce(func.sum(JobExecution.record_count), 0).label("total_recs"),
     ).select_from(JobExecution)
     if cutoff is not None:
@@ -76,6 +77,7 @@ async def get_stats(
         success_count=stats.success or 0,
         failed_count=stats.failed or 0,
         running_count=stats.running or 0,
+        cancelled_count=stats.cancelled or 0,
         total_records=stats.total_recs or 0,
         recent_executions=_build_responses(recent_execs, tables_map)
     )

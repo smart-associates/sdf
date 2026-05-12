@@ -48,5 +48,6 @@ class ExecutionStatsResponse(BaseModel):
     success_count: int
     failed_count: int
     running_count: int
+    cancelled_count: int
     total_records: int
     recent_executions: list[JobExecutionResponse] = []
