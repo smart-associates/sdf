@@ -142,7 +142,7 @@ export default function Jobs() {
           </thead>
           <tbody className="divide-y">
             {sortedJobs.map(j => (
-              <tr key={j.id} className="hover:bg-gray-50">
+              <tr key={j.id} onClick={() => openEdit(j)} className="hover:bg-gray-50 cursor-pointer">
                 <td className="px-4 py-3 font-medium">{j.name}</td>
                 <td className="px-4 py-3 text-gray-600">
                   <div className="flex items-center gap-2">
@@ -161,7 +161,7 @@ export default function Jobs() {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-500 capitalize">{j.migration_mode.replace('_', ' ')}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                   <div className="flex items-center gap-2 justify-end">
                     {j.running_execution_id ? (
                       <button
