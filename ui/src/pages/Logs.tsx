@@ -107,7 +107,7 @@ export default function Logs() {
                   onChange={e => { setFilterJob(e.target.value ? +e.target.value : ''); setPage(0) }}
                 >
                   <option value="">All Jobs</option>
-                  {jobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
+                  {[...jobs].sort((a, b) => a.name.localeCompare(b.name)).map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
                 </select>
               </th>
               <th className="px-4 py-2">
