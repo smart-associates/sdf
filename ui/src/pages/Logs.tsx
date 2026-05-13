@@ -57,11 +57,12 @@ export default function Logs() {
   const [expanded, setExpanded] = useState<number | null>(null)
   const [filterJob, setFilterJob] = useState<number | ''>('')
   const [filterDays, setFilterDays] = useState<number | ''>(7)
+  const [filterStatus, setFilterStatus] = useState<string>('')
   const [page, setPage] = useState(0)
 
   const { data: executions = [], isLoading } = useQuery({
-    queryKey: ['executions', filterJob, filterDays, page],
-    queryFn: () => getExecutions(filterJob ? +filterJob : undefined, PAGE_SIZE, filterDays ? +filterDays : undefined, page * PAGE_SIZE),
+    queryKey: ['executions', filterJob, filterDays, filterStatus, page],
+    queryFn: () => getExecutions(filterJob ? +filterJob : undefined, PAGE_SIZE, filterDays ? +filterDays : undefined, page * PAGE_SIZE, filterStatus || undefined),
     refetchInterval: 15_000,
   })
 
@@ -104,6 +105,17 @@ export default function Logs() {
             <option value="7">Last 7 Days</option>
             <option value="30">Last 30 Days</option>
             <option value="90">Last 90 Days</option>
+          </select>
+          <select
+            className="border rounded-lg px-3 py-2 text-sm"
+            value={filterStatus}
+            onChange={e => { setFilterStatus(e.target.value); setPage(0) }}
+          >
+            <option value="">All Statuses</option>
+            <option value="success">Success</option>
+            <option value="failed">Failed</option>
+            <option value="running">Running</option>
+            <option value="cancelled">Cancelled</option>
           </select>
           <select
             className="border rounded-lg px-3 py-2 text-sm"

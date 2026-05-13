@@ -109,6 +109,7 @@ async def get_execution(exec_id: int, db: AsyncSession = Depends(get_db)):
 async def list_executions(
     job_id: Optional[int] = Query(None),
     days: Optional[int] = Query(None),
+    status: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0),
     db: AsyncSession = Depends(get_db)
@@ -119,6 +120,8 @@ async def list_executions(
     if days:
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         q = q.where(JobExecution.started_at >= cutoff)
+    if status:
+        q = q.where(JobExecution.status == status)
     result = await db.execute(q)
     execs = result.scalars().all()
     exec_ids = [ex.id for ex in execs]
