@@ -89,48 +89,56 @@ export default function Logs() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Execution Logs</h1>
-          <p className="text-gray-500 text-sm mt-1">History of all migration runs</p>
-        </div>
-        <div className="flex gap-2">
-          <select
-            className="border rounded-lg px-3 py-2 text-sm"
-            value={filterDays}
-            onChange={e => { setFilterDays(e.target.value ? +e.target.value : ''); setPage(0) }}
-          >
-            <option value="">All Time</option>
-            <option value="1">Last 1 Day</option>
-            <option value="7">Last 7 Days</option>
-            <option value="30">Last 30 Days</option>
-            <option value="90">Last 90 Days</option>
-          </select>
-          <select
-            className="border rounded-lg px-3 py-2 text-sm"
-            value={filterStatus}
-            onChange={e => { setFilterStatus(e.target.value); setPage(0) }}
-          >
-            <option value="">All Statuses</option>
-            <option value="success">Success</option>
-            <option value="failed">Failed</option>
-            <option value="running">Running</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          <select
-            className="border rounded-lg px-3 py-2 text-sm"
-            value={filterJob}
-            onChange={e => { setFilterJob(e.target.value ? +e.target.value : ''); setPage(0) }}
-          >
-            <option value="">All Jobs</option>
-            {jobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
-          </select>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold">Execution Logs</h1>
+        <p className="text-gray-500 text-sm mt-1">History of all migration runs</p>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2 w-6" />
+              <th className="px-4 py-2" />
+              <th className="px-4 py-2">
+                <select
+                  className="border rounded-lg px-2 py-1 text-sm font-normal w-full"
+                  value={filterJob}
+                  onChange={e => { setFilterJob(e.target.value ? +e.target.value : ''); setPage(0) }}
+                >
+                  <option value="">All Jobs</option>
+                  {jobs.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
+                </select>
+              </th>
+              <th className="px-4 py-2">
+                <select
+                  className="border rounded-lg px-2 py-1 text-sm font-normal w-full"
+                  value={filterStatus}
+                  onChange={e => { setFilterStatus(e.target.value); setPage(0) }}
+                >
+                  <option value="">All Statuses</option>
+                  <option value="success">Success</option>
+                  <option value="failed">Failed</option>
+                  <option value="running">Running</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </th>
+              <th className="px-4 py-2" />
+              <th className="px-4 py-2" />
+              <th className="px-4 py-2">
+                <select
+                  className="border rounded-lg px-2 py-1 text-sm font-normal w-full"
+                  value={filterDays}
+                  onChange={e => { setFilterDays(e.target.value ? +e.target.value : ''); setPage(0) }}
+                >
+                  <option value="">All Time</option>
+                  <option value="1">Last 1 Day</option>
+                  <option value="7">Last 7 Days</option>
+                  <option value="30">Last 30 Days</option>
+                  <option value="90">Last 90 Days</option>
+                </select>
+              </th>
+            </tr>
             <tr>
               <th className="px-4 py-3 w-6" />
               <SortableHeader label="ID" sortKey="id" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
