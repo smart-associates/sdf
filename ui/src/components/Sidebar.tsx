@@ -31,11 +31,19 @@ export default function Sidebar() {
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
   }, [collapsed])
 
+  function handleAsideClick(e: React.MouseEvent<HTMLElement>) {
+    if (!collapsed) return
+    if ((e.target as HTMLElement).closest('a, button')) return
+    setCollapsed(false)
+  }
+
+
   return (
     <aside
+      onClick={handleAsideClick}
       className={clsx(
         'group/aside relative bg-gray-900 text-white flex flex-col transition-[width] duration-200',
-        collapsed ? 'w-16' : 'w-56'
+        collapsed ? 'w-16 cursor-pointer' : 'w-56'
       )}
     >
       <button
