@@ -55,6 +55,19 @@ export default function Dashboard() {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   }
 
+  const xAxisTicks: string[] = []
+  let lastTickBucket = ''
+  for (const p of timelineData) {
+    const d = new Date(p.started_at)
+    const bucket = filterDays === 1
+      ? `${d.toDateString()} ${d.getHours()}`
+      : d.toDateString()
+    if (bucket !== lastTickBucket) {
+      xAxisTicks.push(p.started_at)
+      lastTickBucket = bucket
+    }
+  }
+
   const fmtCompact = (v: number) =>
     new Intl.NumberFormat(undefined, { notation: 'compact', maximumSignificantDigits: 2 }).format(v)
 
@@ -118,7 +131,8 @@ export default function Dashboard() {
                   dataKey="started_at"
                   tick={{ fontSize: 10 }}
                   tickFormatter={fmtTick}
-                  interval="preserveStartEnd"
+                  ticks={xAxisTicks}
+                  interval={0}
                   minTickGap={24}
                 />
                 <YAxis
