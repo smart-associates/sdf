@@ -121,7 +121,12 @@ export default function Dashboard() {
                   interval="preserveStartEnd"
                   minTickGap={24}
                 />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtCompact} width={36} />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={fmtCompact}
+                  width={36}
+                  scale="sqrt"
+                />
                 <Tooltip
                   trigger="hover"
                   cursor={{ fill: 'rgba(0,0,0,0.04)' }}
