@@ -49,10 +49,14 @@ export default function Dashboard() {
   const fmtTick = (iso: string) => {
     const d = new Date(iso)
     if (filterDays === 1) {
-      return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+      const h = d.getHours()
+      return `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`
     }
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   }
+
+  const fmtCompact = (v: number) =>
+    new Intl.NumberFormat(undefined, { notation: 'compact', maximumSignificantDigits: 2 }).format(v)
 
   const dbTypeCounts = connections.reduce((acc: Record<string, number>, c) => {
     acc[c.db_type] = (acc[c.db_type] || 0) + 1
@@ -117,7 +121,7 @@ export default function Dashboard() {
                   interval="preserveStartEnd"
                   minTickGap={24}
                 />
-                <YAxis tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtCompact} width={36} />
                 <Tooltip
                   trigger="hover"
                   cursor={{ fill: 'rgba(0,0,0,0.04)' }}
