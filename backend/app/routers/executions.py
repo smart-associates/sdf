@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
 from app.database import get_db
 from app.models.job import JobExecution, JobExecutionTable, JobExecutionLog
-from app.schemas.execution import JobExecutionResponse, JobExecutionTableResponse, ExecutionStatsResponse, LogEntryResponse
+from app.schemas.execution import JobExecutionResponse, JobExecutionTableResponse, ExecutionStatsResponse, LogEntryResponse, RecordsTimelinePoint
 
 router = APIRouter(prefix="/api/executions", tags=["executions"])
 
@@ -72,6 +72,8 @@ async def get_stats(
     exec_ids = [ex.id for ex in recent_execs]
     tables_map = await _batch_load_tables(db, exec_ids)
 
+    timeline = await _build_records_timeline(db, days, cutoff)
+
     return ExecutionStatsResponse(
         total_runs=stats.total or 0,
         success_count=stats.success or 0,
@@ -79,8 +81,36 @@ async def get_stats(
         running_count=stats.running or 0,
         cancelled_count=stats.cancelled or 0,
         total_records=stats.total_recs or 0,
-        recent_executions=_build_responses(recent_execs, tables_map)
+        recent_executions=_build_responses(recent_execs, tables_map),
+        records_timeline=timeline,
     )
+
+
+async def _build_records_timeline(
+    db: AsyncSession,
+    days: Optional[int],
+    cutoff: Optional[datetime],
+) -> list[RecordsTimelinePoint]:
+    tl_q = select(
+        JobExecution.id,
+        JobExecution.started_at,
+        JobExecution.status,
+        JobExecution.record_count,
+    ).where(JobExecution.status.in_(["success", "failed", "cancelled"]))
+    if cutoff is not None:
+        tl_q = tl_q.where(JobExecution.started_at >= cutoff)
+    tl_q = tl_q.order_by(JobExecution.started_at.asc())
+    rows = (await db.execute(tl_q)).all()
+
+    return [
+        RecordsTimelinePoint(
+            id=row.id,
+            started_at=row.started_at,
+            status=row.status,
+            record_count=row.record_count or 0,
+        )
+        for row in rows
+    ]
 
 
 @router.get("/{exec_id}/logs", response_model=list[LogEntryResponse])

@@ -7,6 +7,7 @@ import { getJobs } from '../api/jobs'
 import StatusBadge from '../components/StatusBadge'
 
 const COLORS = { success: '#22c55e', failed: '#ef4444', running: '#3b82f6', cancelled: '#eab308' }
+type StatusKey = keyof typeof COLORS
 
 function StatCard({ label, value, sub }: { label: string; value: number | string; sub?: string }) {
   return (
@@ -37,14 +38,21 @@ export default function Dashboard() {
       ].filter(d => d.value > 0)
     : []
 
-  const barData = (stats?.recent_executions || [])
-    .slice(0, 10)
-    .reverse()
-    .map(e => ({
-      id: `#${e.id}`,
-      records: e.record_count || 0,
-      status: e.status,
-    }))
+  const timelineData = (stats?.records_timeline || []).map(p => ({
+    id: p.id,
+    label: `#${p.id}`,
+    started_at: p.started_at,
+    status: p.status,
+    records: p.record_count,
+  }))
+
+  const fmtTick = (iso: string) => {
+    const d = new Date(iso)
+    if (filterDays === 1) {
+      return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    }
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  }
 
   const dbTypeCounts = connections.reduce((acc: Record<string, number>, c) => {
     acc[c.db_type] = (acc[c.db_type] || 0) + 1
@@ -98,14 +106,32 @@ export default function Dashboard() {
         </div>
 
         <div className="bg-white rounded-xl p-5 shadow-sm border">
-          <h2 className="text-sm font-semibold mb-4">Records per Execution</h2>
-          {barData.length > 0 ? (
+          <h2 className="text-sm font-semibold mb-4">Records over Time</h2>
+          {timelineData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={barData}>
-                <XAxis dataKey="id" tick={{ fontSize: 11 }} />
+              <BarChart data={timelineData} barCategoryGap={2}>
+                <XAxis
+                  dataKey="started_at"
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={fmtTick}
+                  interval="preserveStartEnd"
+                  minTickGap={24}
+                />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="records" fill="#3b82f6" radius={[3, 3, 0, 0]} />
+                <Tooltip
+                  trigger="hover"
+                  cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                  labelFormatter={(_v, payload) => {
+                    const p = payload?.[0]?.payload as { label: string; started_at: string } | undefined
+                    return p ? `${p.label} · ${new Date(p.started_at).toLocaleString()}` : ''
+                  }}
+                  formatter={(v: number) => [v.toLocaleString(), 'Records']}
+                />
+                <Bar dataKey="records" maxBarSize={10} radius={[3, 3, 0, 0]}>
+                  {timelineData.map(p => (
+                    <Cell key={p.id} fill={COLORS[p.status as StatusKey] || COLORS.running} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           ) : (

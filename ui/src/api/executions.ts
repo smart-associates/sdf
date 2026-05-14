@@ -23,6 +23,13 @@ export interface Execution {
   tables: ExecutionTable[]
 }
 
+export interface RecordsTimelinePoint {
+  id: number
+  started_at: string
+  status: string
+  record_count: number
+}
+
 export interface ExecutionStats {
   total_runs: number
   success_count: number
@@ -31,6 +38,7 @@ export interface ExecutionStats {
   cancelled_count: number
   total_records: number
   recent_executions: Execution[]
+  records_timeline: RecordsTimelinePoint[]
 }
 
 export interface LogEntry {

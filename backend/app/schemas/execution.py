@@ -43,6 +43,13 @@ class LogEntryResponse(BaseModel):
         from_attributes = True
         populate_by_name = True
 
+class RecordsTimelinePoint(BaseModel):
+    id: int
+    started_at: datetime
+    status: str
+    record_count: int = 0
+
+
 class ExecutionStatsResponse(BaseModel):
     total_runs: int
     success_count: int
@@ -51,3 +58,4 @@ class ExecutionStatsResponse(BaseModel):
     cancelled_count: int
     total_records: int
     recent_executions: list[JobExecutionResponse] = []
+    records_timeline: list[RecordsTimelinePoint] = []
