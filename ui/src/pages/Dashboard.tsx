@@ -38,13 +38,15 @@ export default function Dashboard() {
       ].filter(d => d.value > 0)
     : []
 
-  const timelineData = (stats?.records_timeline || []).map(p => ({
-    id: p.id,
-    label: `#${p.id}`,
-    started_at: p.started_at,
-    status: p.status,
-    records: p.record_count,
-  }))
+  const timelineData = (stats?.records_timeline || [])
+    .filter(p => p.record_count > 0)
+    .map(p => ({
+      id: p.id,
+      label: `#${p.id}`,
+      started_at: p.started_at,
+      status: p.status,
+      records: p.record_count,
+    }))
 
   const fmtTick = (iso: string) => {
     const d = new Date(iso)
