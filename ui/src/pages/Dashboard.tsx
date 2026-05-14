@@ -57,7 +57,7 @@ export default function Dashboard() {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   }
 
-  const xAxisTicks: string[] = []
+  const bucketTicks: string[] = []
   let lastTickBucket = ''
   for (const p of timelineData) {
     const d = new Date(p.started_at)
@@ -65,10 +65,15 @@ export default function Dashboard() {
       ? `${d.toDateString()} ${d.getHours()}`
       : d.toDateString()
     if (bucket !== lastTickBucket) {
-      xAxisTicks.push(p.started_at)
+      bucketTicks.push(p.started_at)
       lastTickBucket = bucket
     }
   }
+  const MAX_X_TICKS = 5
+  const xAxisTicks = bucketTicks.length <= MAX_X_TICKS
+    ? bucketTicks
+    : Array.from({ length: MAX_X_TICKS }, (_, i) =>
+        bucketTicks[Math.round((i * (bucketTicks.length - 1)) / (MAX_X_TICKS - 1))])
 
   const fmtCompact = (v: number) =>
     new Intl.NumberFormat(undefined, { notation: 'compact', maximumSignificantDigits: 2 }).format(v)
@@ -142,6 +147,7 @@ export default function Dashboard() {
                   tickFormatter={fmtCompact}
                   width={36}
                   scale="sqrt"
+                  tickCount={5}
                 />
                 <Tooltip
                   trigger="hover"
