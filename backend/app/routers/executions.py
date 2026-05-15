@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
 from app.database import get_db
-from app.models.job import JobExecution, JobExecutionTable, JobExecutionLog
+from app.models.job import Job, JobExecution, JobExecutionTable, JobExecutionLog
 from app.schemas.execution import JobExecutionResponse, JobExecutionTableResponse, ExecutionStatsResponse, LogEntryResponse, RecordsTimelinePoint
 
 router = APIRouter(prefix="/api/executions", tags=["executions"])
@@ -91,12 +91,18 @@ async def _build_records_timeline(
     days: Optional[int],
     cutoff: Optional[datetime],
 ) -> list[RecordsTimelinePoint]:
-    tl_q = select(
-        JobExecution.id,
-        JobExecution.started_at,
-        JobExecution.status,
-        JobExecution.record_count,
-    ).where(JobExecution.status.in_(["success", "failed", "cancelled"]))
+    tl_q = (
+        select(
+            JobExecution.id,
+            JobExecution.job_id,
+            JobExecution.started_at,
+            JobExecution.status,
+            JobExecution.record_count,
+            Job.name.label("job_name"),
+        )
+        .join(Job, Job.id == JobExecution.job_id, isouter=True)
+        .where(JobExecution.status.in_(["success", "failed", "cancelled"]))
+    )
     if cutoff is not None:
         tl_q = tl_q.where(JobExecution.started_at >= cutoff)
     tl_q = tl_q.order_by(JobExecution.started_at.asc())
@@ -105,6 +111,8 @@ async def _build_records_timeline(
     return [
         RecordsTimelinePoint(
             id=row.id,
+            job_id=row.job_id,
+            job_name=row.job_name or f"Job #{row.job_id}",
             started_at=row.started_at,
             status=row.status,
             record_count=row.record_count or 0,

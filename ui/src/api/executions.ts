@@ -25,6 +25,8 @@ export interface Execution {
 
 export interface RecordsTimelinePoint {
   id: number
+  job_id: number
+  job_name: string
   started_at: string
   status: string
   record_count: number

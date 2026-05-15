@@ -42,7 +42,7 @@ export default function Dashboard() {
     .filter(p => p.record_count > 0)
     .map(p => ({
       id: p.id,
-      label: `#${p.id}`,
+      label: p.job_name,
       started_at: p.started_at,
       status: p.status,
       records: p.record_count,

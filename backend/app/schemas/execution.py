@@ -45,6 +45,8 @@ class LogEntryResponse(BaseModel):
 
 class RecordsTimelinePoint(BaseModel):
     id: int
+    job_id: int
+    job_name: str
     started_at: datetime
     status: str
     record_count: int = 0
