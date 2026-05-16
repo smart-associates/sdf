@@ -124,8 +124,8 @@ export default function Dashboard() {
         <StatCard label="Records Migrated" value={(stats?.total_records || 0).toLocaleString()} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl p-5 shadow-sm border">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl p-5 shadow-sm border md:col-span-1">
           <h2 className="text-sm font-semibold mb-4">Execution Status</h2>
           {pieData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
@@ -153,7 +153,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl p-5 shadow-sm border">
+        <div className="bg-white rounded-xl p-5 shadow-sm border md:col-span-2">
           <h2 className="text-sm font-semibold mb-4">Records over Time</h2>
           {timelineData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
