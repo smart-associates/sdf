@@ -78,6 +78,18 @@ export default function Dashboard() {
   const fmtCompact = (v: number) =>
     new Intl.NumberFormat(undefined, { notation: 'compact', maximumSignificantDigits: 2 }).format(v)
 
+  const renderPieLabel = ({ cx, cy, midAngle, outerRadius, name, value }: any) => {
+    const RAD = Math.PI / 180
+    const r = outerRadius + 14
+    const x = cx + r * Math.cos(-midAngle * RAD)
+    const y = cy + r * Math.sin(-midAngle * RAD)
+    return (
+      <text x={x} y={y} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={11} fill="#374151">
+        {`${name}: ${value}`}
+      </text>
+    )
+  }
+
   const dbTypeCounts = connections.reduce((acc: Record<string, number>, c) => {
     acc[c.db_type] = (acc[c.db_type] || 0) + 1
     return acc
@@ -118,7 +130,19 @@ export default function Dashboard() {
           {pieData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={45}
+                  outerRadius={70}
+                  paddingAngle={2}
+                  minAngle={6}
+                  dataKey="value"
+                  labelLine
+                  label={renderPieLabel}
+                >
+
                   {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                 </Pie>
                 <Tooltip />
