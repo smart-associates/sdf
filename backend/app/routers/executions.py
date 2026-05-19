@@ -148,6 +148,7 @@ async def list_executions(
     job_id: Optional[int] = Query(None),
     days: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
+    hide_empty: bool = Query(False),
     limit: int = Query(50, le=200),
     offset: int = Query(0),
     db: AsyncSession = Depends(get_db)
@@ -160,6 +161,8 @@ async def list_executions(
         q = q.where(JobExecution.started_at >= cutoff)
     if status:
         q = q.where(JobExecution.status == status)
+    if hide_empty:
+        q = q.where(JobExecution.record_count > 0)
     result = await db.execute(q)
     execs = result.scalars().all()
     exec_ids = [ex.id for ex in execs]

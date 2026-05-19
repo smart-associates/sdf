@@ -58,11 +58,12 @@ export default function Logs() {
   const [filterJob, setFilterJob] = useState<number | ''>('')
   const [filterDays, setFilterDays] = useState<number | ''>(7)
   const [filterStatus, setFilterStatus] = useState<string>('')
+  const [hideEmpty, setHideEmpty] = useState<boolean>(false)
   const [page, setPage] = useState(0)
 
   const { data: executions = [], isLoading } = useQuery({
-    queryKey: ['executions', filterJob, filterDays, filterStatus, page],
-    queryFn: () => getExecutions(filterJob ? +filterJob : undefined, PAGE_SIZE, filterDays ? +filterDays : undefined, page * PAGE_SIZE, filterStatus || undefined),
+    queryKey: ['executions', filterJob, filterDays, filterStatus, hideEmpty, page],
+    queryFn: () => getExecutions(filterJob ? +filterJob : undefined, PAGE_SIZE, filterDays ? +filterDays : undefined, page * PAGE_SIZE, filterStatus || undefined, hideEmpty),
     refetchInterval: 15_000,
   })
 
@@ -123,7 +124,16 @@ export default function Logs() {
                   <option value="cancelled">Cancelled</option>
                 </select>
               </th>
-              <th className="px-4 py-2" />
+              <th className="px-4 py-2">
+                <select
+                  className="border rounded-lg px-2 py-1 text-sm font-normal w-full"
+                  value={hideEmpty ? '1' : ''}
+                  onChange={e => { setHideEmpty(e.target.value === '1'); setPage(0) }}
+                >
+                  <option value="">All Records</option>
+                  <option value="1">Non-zero</option>
+                </select>
+              </th>
               <th className="px-4 py-2" />
               <th className="px-4 py-2">
                 <select
