@@ -38,10 +38,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Runtime deps only: libpq5 (belt-and-braces for psycopg2-binary) + curl (HEALTHCHECK).
-# All Python deps ship manylinux/musllinux wheels for amd64+arm64, so no compiler needed.
+# libpq5 + curl: runtime deps (psycopg2-binary, HEALTHCHECK). postgresql:
+# bundled server for the embedded-Postgres fallback when no external DATABASE_URL
+# is configured (docker-entrypoint.py spins it up on a unix socket). All Python
+# deps ship manylinux/musllinux wheels for amd64+arm64, so no compiler needed.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libpq5 curl \
+ && apt-get install -y --no-install-recommends libpq5 curl postgresql \
  && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt ./
