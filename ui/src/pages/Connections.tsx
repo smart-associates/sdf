@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Plug } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import {
   getConnections, createConnection, updateConnection,
   deleteConnection, testConnection, cloneConnection, DatabaseConnection
@@ -184,15 +184,6 @@ export default function Connections() {
                 </>
               )}
             </div>
-            {modal === 'edit' && form.id && (
-              <button
-                onClick={() => testMut.mutate(form.id!)}
-                disabled={testMut.isPending}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
-              >
-                <Plug size={14} /> Test Connection
-              </button>
-            )}
           </div>
         </Modal>
       )}
