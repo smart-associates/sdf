@@ -33,6 +33,10 @@ export default function Jobs() {
     refetchInterval: (query) => query.state.data?.some(j => j.running_execution_id) ? 5000 : false,
   })
   const { data: connections = [] } = useQuery({ queryKey: ['connections'], queryFn: getConnections })
+  const sortedConnections = useMemo(
+    () => [...connections].sort((a, b) => a.name.localeCompare(b.name)),
+    [connections],
+  )
   const [execJobId, setExecJobId] = useState<number | null>(null)
 
   const { data: execStatus, isError: execError } = useQuery({
@@ -246,14 +250,14 @@ export default function Jobs() {
                 <label className="block text-xs font-medium text-gray-700 mb-1">Source Connection *</label>
                 <select className="w-full border rounded-lg px-3 py-2 text-sm" value={form.source_connection_id || 0} onChange={e => setForm(f => ({ ...f, source_connection_id: +e.target.value }))}>
                   <option value={0}>— Select —</option>
-                  {connections.map(c => <option key={c.id} value={c.id}>{c.name} ({c.db_type})</option>)}
+                  {sortedConnections.map(c => <option key={c.id} value={c.id}>{c.name} ({c.db_type})</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Target Connection *</label>
                 <select className="w-full border rounded-lg px-3 py-2 text-sm" value={form.target_connection_id || 0} onChange={e => setForm(f => ({ ...f, target_connection_id: +e.target.value }))}>
                   <option value={0}>— Select —</option>
-                  {connections.map(c => <option key={c.id} value={c.id}>{c.name} ({c.db_type})</option>)}
+                  {sortedConnections.map(c => <option key={c.id} value={c.id}>{c.name} ({c.db_type})</option>)}
                 </select>
               </div>
               <div className="col-span-2">
