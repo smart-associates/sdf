@@ -13,7 +13,7 @@ class DatabaseConnection(Base):
     database = Column(String(255), nullable=False)
     username = Column(String(255))
     password = Column(String(8192))  # encrypted; sized to hold large encrypted credentials
-    staging_format = Column(String(50))  # csv|parquet (filesystem connections only)
+    staging_format = Column(String(50))  # csv|tsv|parquet|avro (filesystem connections only); tsv reuses the csv path with a tab delimiter
     last_test_status = Column(String(50))   # success|failed
     last_tested_at = Column(String(50))
     last_test_error = Column(String(2048))

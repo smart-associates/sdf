@@ -203,6 +203,14 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         csv_quoting = _get_setting_sync("csv_quoting", "none").strip() or "none"
         csv_delimiter = _get_setting_sync("csv_delimiter", ",").strip() or ","
         csv_header = _get_setting_sync("csv_header", "true").strip() not in ("0", "false", "False")
+
+        def _delim_for(fmt: str) -> str:
+            # TSV is CSV with a tab delimiter: default to a tab when the format
+            # is tsv and the user left the global delimiter at its comma default.
+            # An explicit non-comma delimiter still wins.
+            if fmt == "tsv" and csv_delimiter == ",":
+                return "\t"
+            return csv_delimiter
         log_level = _get_setting_sync("log_level", "minimal").strip() or "minimal"
 
         elog = ExecutionLogger(execution_id, log_level)
@@ -253,8 +261,8 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
             try:
                 if src_is_file:
                     src_fmt = src.get("staging_format") or "parquet"
-                    if src_fmt == "csv":
-                        estimated = get_csv_estimated_row_count(src_dir, src_table)
+                    if src_fmt in ("csv", "tsv"):
+                        estimated = get_csv_estimated_row_count(src_dir, src_table, ext=src_fmt)
                     elif src_fmt == "avro":
                         estimated = get_avro_estimated_row_count(src_dir, src_table)
                     else:
@@ -296,8 +304,8 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 if src_type == "filesystem" and tgt_type == "filesystem":
                     src_fmt = src.get("staging_format") or "parquet"
                     tgt_fmt = tgt.get("staging_format") or "parquet"
-                    if src_fmt == "csv" and tgt_fmt == "csv":
-                        count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb, csv_quoting=csv_quoting, csv_delimiter=csv_delimiter, include_header=csv_header)
+                    if src_fmt == tgt_fmt and src_fmt in ("csv", "tsv"):
+                        count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb, csv_quoting=csv_quoting, csv_delimiter=_delim_for(src_fmt), include_header=csv_header, ext=src_fmt)
                     elif src_fmt == "parquet" and tgt_fmt == "parquet":
                         count = migrate_parquet_to_parquet(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
                     elif src_fmt == "avro" and tgt_fmt == "avro":
@@ -306,9 +314,9 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                         raise ValueError(f"Cross-format filesystem copies ('{src_fmt}' → '{tgt_fmt}') are not supported")
                 elif src_type == "filesystem":
                     src_fmt = src.get("staging_format") or "parquet"
-                    if src_fmt == "csv":
+                    if src_fmt in ("csv", "tsv"):
                         count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb,
-                                                  elog=elog, exec_table_id=exec_table_id)
+                                                  csv_delimiter=_delim_for(src_fmt), elog=elog, exec_table_id=exec_table_id, ext=src_fmt)
                     elif src_fmt == "avro":
                         count = migrate_avro_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb,
                                                    elog=elog, exec_table_id=exec_table_id)
@@ -317,9 +325,9 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                                                       elog=elog, exec_table_id=exec_table_id)
                 elif tgt_type == "filesystem":
                     tgt_fmt = tgt.get("staging_format") or "parquet"
-                    if tgt_fmt == "csv":
-                        count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb, batch_size, csv_quoting=csv_quoting, csv_delimiter=csv_delimiter, include_header=csv_header,
-                                                  elog=elog, exec_table_id=exec_table_id)
+                    if tgt_fmt in ("csv", "tsv"):
+                        count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb, batch_size, csv_quoting=csv_quoting, csv_delimiter=_delim_for(tgt_fmt), include_header=csv_header,
+                                                  elog=elog, exec_table_id=exec_table_id, ext=tgt_fmt)
                     elif tgt_fmt == "avro":
                         count = migrate_db_to_avro(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb,
                                                    elog=elog, exec_table_id=exec_table_id)

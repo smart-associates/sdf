@@ -9,7 +9,7 @@ class DatabaseConnectionBase(BaseModel):
     port: Optional[int] = None
     database: str  # for filesystem: directory path
     username: Optional[str] = None
-    staging_format: Optional[str] = None  # csv|parquet (filesystem connections only)
+    staging_format: Optional[str] = None  # csv|tsv|parquet|avro (filesystem connections only)
 
 class DatabaseConnectionCreate(DatabaseConnectionBase):
     db_type: Literal["postgresql", "mysql", "mssql", "filesystem"]

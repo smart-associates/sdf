@@ -259,9 +259,9 @@ def get_estimated_row_count(
     return None
 
 
-def get_csv_estimated_row_count(directory: str, table: str) -> Optional[int]:
-    """Count rows in a CSV file (header excluded). Returns None on error."""
-    path = _csv_path(directory, table)
+def get_csv_estimated_row_count(directory: str, table: str, ext: str = "csv") -> Optional[int]:
+    """Count rows in a CSV/TSV file (header excluded). Returns None on error."""
+    path = _csv_path(directory, table, ext)
     if not os.path.isfile(path):
         return None
     try:
@@ -627,12 +627,15 @@ def _csv_quoting_kwargs(csv_quoting: str) -> dict:
         return {"quotechar": '"', "quoting": csv.QUOTE_ALL}
 
 
-def _csv_path(directory: str, table: str) -> str:
-    return os.path.join(directory, f"{table}.csv")
+def _csv_path(directory: str, table: str, ext: str = "csv") -> str:
+    # ``ext`` selects the on-disk extension: "csv" or "tsv". TSV is just CSV
+    # with a tab delimiter, so it reuses every CSV reader/writer below — only
+    # the file suffix differs.
+    return os.path.join(directory, f"{table}.{ext}")
 
 
-def csv_table_exists(directory: str, table: str) -> bool:
-    return os.path.isfile(_csv_path(directory, table))
+def csv_table_exists(directory: str, table: str, ext: str = "csv") -> bool:
+    return os.path.isfile(_csv_path(directory, table, ext))
 
 
 @_sanitize_exc
@@ -645,13 +648,15 @@ def migrate_csv_to_db(
     migration_mode: str,
     batch_size: int,
     progress_cb: Optional[Callable[[int], None]] = None,
+    csv_delimiter: str = ",",
     elog=None,
     exec_table_id=None,
+    ext: str = "csv",
 ) -> int:
-    """Read a CSV file and insert rows into a target DB table."""
-    path = _csv_path(src_dir, src_table)
+    """Read a CSV/TSV file and insert rows into a target DB table."""
+    path = _csv_path(src_dir, src_table, ext)
     if not os.path.isfile(path):
-        raise FileNotFoundError(f"CSV file not found: {path}")
+        raise FileNotFoundError(f"{ext.upper()} file not found: {path}")
 
     dialect = tgt_engine.dialect.name
     tgt_full = _full_table(tgt_schema, tgt_table, dialect)
@@ -664,7 +669,7 @@ def migrate_csv_to_db(
 
     total = 0
     with open(path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
+        reader = csv.DictReader(f, delimiter=_decode_csv_delimiter(csv_delimiter))
         cols = list(reader.fieldnames or [])
         batch: list[dict] = []
         for row in reader:
@@ -699,15 +704,16 @@ def migrate_db_to_csv(
     include_header: bool = True,
     elog=None,
     exec_table_id=None,
+    ext: str = "csv",
 ) -> int:
-    """Stream rows from a source DB table and write to a CSV file."""
+    """Stream rows from a source DB table and write to a CSV/TSV file."""
     src_full = _full_table(src_schema, src_table, src_engine.dialect.name)
     query = f"SELECT * FROM {src_full}"
     if table_filter:
         query += f" WHERE {_validate_filter(table_filter)}"
 
     os.makedirs(tgt_dir, exist_ok=True)
-    path = _csv_path(tgt_dir, tgt_table)
+    path = _csv_path(tgt_dir, tgt_table, ext)
     append_mode = migration_mode == "append" and os.path.isfile(path)
     file_mode = "a" if append_mode else "w"
 
@@ -1068,20 +1074,21 @@ def migrate_csv_to_csv(
     csv_quoting: str = "none",
     csv_delimiter: str = ",",
     include_header: bool = True,
+    ext: str = "csv",
 ) -> int:
-    """Copy a CSV file to another directory."""
-    src_path = _csv_path(src_dir, src_table)
+    """Copy a CSV/TSV file to another directory."""
+    src_path = _csv_path(src_dir, src_table, ext)
     if not os.path.isfile(src_path):
-        raise FileNotFoundError(f"CSV file not found: {src_path}")
+        raise FileNotFoundError(f"{ext.upper()} file not found: {src_path}")
 
     os.makedirs(tgt_dir, exist_ok=True)
-    tgt_path = _csv_path(tgt_dir, tgt_table)
+    tgt_path = _csv_path(tgt_dir, tgt_table, ext)
     append_mode = migration_mode == "append" and os.path.isfile(tgt_path)
     file_mode = "a" if append_mode else "w"
 
     total = 0
     with open(src_path, newline="", encoding="utf-8") as src_f:
-        reader = csv.DictReader(src_f)
+        reader = csv.DictReader(src_f, delimiter=_decode_csv_delimiter(csv_delimiter))
         cols = list(reader.fieldnames or [])
         with open(tgt_path, file_mode, newline="", encoding="utf-8") as tgt_f:
             writer = csv.DictWriter(tgt_f, fieldnames=cols, delimiter=_decode_csv_delimiter(csv_delimiter), **_csv_quoting_kwargs(csv_quoting))

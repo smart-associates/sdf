@@ -126,7 +126,12 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
     try:
         if src.db_type == "filesystem":
             fmt = src.staging_format or "parquet"
-            check_fn = csv_table_exists if fmt == "csv" else avro_table_exists if fmt == "avro" else parquet_table_exists
+            if fmt in ("csv", "tsv"):
+                check_fn = lambda d, t, _ext=fmt: csv_table_exists(d, t, ext=_ext)
+            elif fmt == "avro":
+                check_fn = avro_table_exists
+            else:
+                check_fn = parquet_table_exists
             for entry in tables:
                 table = entry.split(".", 1)[1] if "." in entry else entry
                 exists = check_fn(src.database or "", table)
