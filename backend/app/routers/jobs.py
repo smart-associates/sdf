@@ -1,3 +1,4 @@
+import asyncio
 import os
 from fastapi import APIRouter, Depends, HTTPException
 import sqlalchemy as sa
@@ -123,7 +124,10 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
     if not tables:
         warnings.append("No source tables defined")
 
-    try:
+    def _validate_source_tables():
+        """Blocking: connect to source and check table existence."""
+        _items = []
+        _valid = True
         if src.db_type == "filesystem":
             fmt = src.staging_format or "parquet"
             if fmt in ("csv", "tsv"):
@@ -135,13 +139,13 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
             for entry in tables:
                 table = entry.split(".", 1)[1] if "." in entry else entry
                 exists = check_fn(src.database or "", table)
-                items.append(JobValidationItem(
+                _items.append(JobValidationItem(
                     table_name=entry,
                     exists=exists,
                     message=f"{fmt.upper()} file found" if exists else f"{fmt.upper()} file not found: {table}.{fmt}"
                 ))
                 if not exists:
-                    valid = False
+                    _valid = False
         else:
             src_pw = decrypt(src.password or "")
             src_engine = build_engine(src.db_type, src.host, src.port, src.database, src.username, src_pw)
@@ -152,15 +156,22 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
                     else:
                         schema, table = None, entry
                     exists = table_exists(src_engine, table, schema)
-                    items.append(JobValidationItem(
+                    _items.append(JobValidationItem(
                         table_name=entry,
                         exists=exists,
                         message="Table found" if exists else "Table not found on source"
                     ))
                     if not exists:
-                        valid = False
+                        _valid = False
             finally:
                 src_engine.dispose()
+        return _items, _valid
+
+    try:
+        src_items, src_valid = await asyncio.to_thread(_validate_source_tables)
+        items.extend(src_items)
+        if not src_valid:
+            valid = False
     except Exception as e:
         warnings.append(f"Could not connect to source: {str(e)}")
         valid = False
@@ -172,11 +183,14 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
         warnings.append("Target connection not found")
         valid = False
     elif not job.create_target_table:
-        try:
+        def _validate_target():
+            """Blocking: connect to target and check table existence."""
+            _warnings = []
+            _valid = True
             if tgt.db_type == "filesystem":
                 tgt_dir = tgt.database or ""
                 if not os.path.isdir(tgt_dir):
-                    warnings.append(f"Target filesystem directory '{tgt_dir}' does not exist (it will be created on execution)")
+                    _warnings.append(f"Target filesystem directory '{tgt_dir}' does not exist (it will be created on execution)")
             else:
                 tgt_pw = decrypt(tgt.password or "")
                 tgt_engine = build_engine(tgt.db_type, tgt.host, tgt.port, tgt.database, tgt.username, tgt_pw)
@@ -186,10 +200,17 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
                         table = entry.split(".", 1)[1] if "." in entry else entry
                         tgt_schema = job.target_schema
                         if not table_exists(tgt_engine, table, tgt_schema):
-                            warnings.append(f"Target table '{table}' does not exist (enable 'create target table' to auto-create)")
-                            valid = False  # missing target table blocks execution
+                            _warnings.append(f"Target table '{table}' does not exist (enable 'create target table' to auto-create)")
+                            _valid = False  # missing target table blocks execution
                 finally:
                     tgt_engine.dispose()
+            return _warnings, _valid
+
+        try:
+            tgt_warnings, tgt_valid = await asyncio.to_thread(_validate_target)
+            warnings.extend(tgt_warnings)
+            if not tgt_valid:
+                valid = False
         except Exception as e:
             warnings.append(f"Could not connect to target: {str(e)}")
             valid = False

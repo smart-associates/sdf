@@ -142,13 +142,26 @@ def _sanitize_exc(fn):
     return wrapper
 
 
+def _connect_timeout_args(db_type: str) -> dict:
+    """Return driver-specific connect timeout args (10s) for the initial connection.
+
+    Without these, driver defaults on an unreachable host are painful:
+    pymssql ~60s, psycopg2 ~120s, pymysql effectively infinite.
+    """
+    if db_type in ("postgresql", "mysql"):
+        return {"connect_timeout": 10}
+    if db_type == "mssql":
+        return {"login_timeout": 10}
+    return {}
+
+
 def build_engine(db_type: str, host: str, port: int, database: str, username: str, password: str) -> Engine:
     if db_type not in _DRIVERS:
         raise ValueError(f"Unsupported db_type: {db_type}")
     port = port or _DEFAULT_PORTS.get(db_type, 5432)
     url = URL.create(_DRIVERS[db_type], username=username, password=password,
                      host=host, port=port, database=database)
-    return sa.create_engine(url, pool_pre_ping=True)
+    return sa.create_engine(url, pool_pre_ping=True, connect_args=_connect_timeout_args(db_type))
 
 
 def to_generic_type(col_type) -> sa.types.TypeEngine:
