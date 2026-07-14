@@ -81,6 +81,14 @@ cd ui && npx vitest run
 
 ## Making Changes
 
+### Issue tracking
+
+Work on this repo is tracked as GitHub issues on `smart-associates/sdf`, which drives the roadmap board automatically.
+
+- **Before starting a piece of work, open a GitHub issue for it.** A one-line title is enough (`gh issue create`).
+- **Close the issue from the commit** by including `Closes #N` in the commit message. Closing the issue moves its roadmap card to Done.
+- Applies to substantive work, not trivial one-off fixes — use judgement.
+
 ### Branching
 
 - Branch from `main`.
@@ -97,6 +105,7 @@ cd ui && npx vitest run
 ### Commits
 
 - Write clear, imperative commit messages: `Add MySQL source support`, `Fix race condition in job runner`.
+- Reference the tracking issue with `Closes #N` so its roadmap card moves to Done.
 - Avoid committing `.env` files, secrets, or generated build artifacts.
 
 ---
