@@ -6,14 +6,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
-from app.models.job import Job, JobExecution, JobExecutionTable, JobExecutionLog
+from app.models.job import Job, JobTable, JobExecution, JobExecutionTable, JobExecutionLog
 from app.models.connection import DatabaseConnection
 from app.schemas.job import JobCreate, JobUpdate, JobResponse, JobValidationResponse, JobValidationItem, JobExecuteResponse
 from app.services.job_runner import start_job_execution, stop_execution
 from app.services.encryption import decrypt
 from app.services.migration_engine import build_engine, table_exists, csv_table_exists, parquet_table_exists, avro_table_exists
 from app.services.clone_utils import next_copy_name
-from app.services.table_parser import parse_source_tables
+from app.services.job_objects import resolve_job_objects
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -21,6 +21,32 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 def _validate_connections(data):
     if data.source_connection_id == data.target_connection_id:
         raise HTTPException(400, "Source and target connections must be different")
+
+
+def _build_job_tables(items) -> list[JobTable]:
+    """Materialize JobTable rows from JobTableItem schema entries, preserving order."""
+    rows = []
+    for i, t in enumerate(items):
+        rows.append(JobTable(
+            schema_name=t.schema_name or None,
+            object_name=t.object_name,
+            table_filter=t.table_filter or None,
+            enabled=t.enabled,
+            position=t.position if t.position else i,
+        ))
+    return rows
+
+
+def _resolve_job_tables(job) -> list:
+    """Resolve a job's ORM job_tables rows into ordered ResolvedObjects."""
+    rows = [{
+        "schema_name": t.schema_name,
+        "object_name": t.object_name,
+        "table_filter": t.table_filter,
+        "enabled": t.enabled,
+        "position": t.position,
+    } for t in job.tables]
+    return resolve_job_objects(rows)
 
 
 @router.get("", response_model=list[JobResponse])
@@ -55,7 +81,11 @@ async def create_job(data: JobCreate, db: AsyncSession = Depends(get_db)):
         r = await db.execute(select(DatabaseConnection).where(DatabaseConnection.id == conn_id))
         if not r.scalar_one_or_none():
             raise HTTPException(400, f"Connection {conn_id} not found")
-    job = Job(**data.model_dump())
+    payload = data.model_dump()
+    table_items = data.tables
+    payload.pop("tables", None)
+    job = Job(**payload)
+    job.tables = _build_job_tables(table_items)
     db.add(job)
     await db.commit()
     await db.refresh(job)
@@ -69,8 +99,14 @@ async def update_job(job_id: int, data: JobUpdate, db: AsyncSession = Depends(ge
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(404, "Job not found")
-    for k, v in data.model_dump(exclude_unset=True).items():
+    update = data.model_dump(exclude_unset=True)
+    tables_given = "tables" in update
+    update.pop("tables", None)
+    for k, v in update.items():
         setattr(job, k, v)
+    if tables_given:
+        # Replace the selection wholesale (delete-orphan cascade removes old rows).
+        job.tables = _build_job_tables(data.tables)
     await db.commit()
     await db.refresh(job)
     return job
@@ -120,7 +156,7 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
     warnings = []
     valid = True
 
-    tables = parse_source_tables(job.source_tables)
+    tables = [o.entry for o in _resolve_job_tables(job)]
     if not tables:
         warnings.append("No source tables defined")
 
@@ -225,7 +261,7 @@ async def execute_job(job_id: int, db: AsyncSession = Depends(get_db)):
     if not job:
         raise HTTPException(404, "Job not found")
 
-    tables = parse_source_tables(job.source_tables)
+    tables = [o.entry for o in _resolve_job_tables(job)]
     if not tables:
         raise HTTPException(400, "Job has no source tables defined")
 
@@ -252,13 +288,20 @@ async def clone_job(job_id: int, db: AsyncSession = Depends(get_db)):
     clone = Job(
         name=new_name,
         source_connection_id=source.source_connection_id,
-        source_tables=source.source_tables,
-        table_filter=source.table_filter,
         target_connection_id=source.target_connection_id,
         target_schema=source.target_schema,
         create_target_table=source.create_target_table,
         migration_mode=source.migration_mode,
     )
+    clone.tables = [
+        JobTable(
+            schema_name=t.schema_name,
+            object_name=t.object_name,
+            table_filter=t.table_filter,
+            enabled=t.enabled,
+            position=t.position,
+        ) for t in source.tables
+    ]
     db.add(clone)
     await db.commit()
     await db.refresh(clone)

@@ -13,7 +13,7 @@ from app.models.job import Job, JobExecution, JobExecutionTable
 from app.models.connection import DatabaseConnection
 from app.models.setting import Setting
 from app.services.encryption import decrypt
-from app.services.table_parser import parse_source_tables
+from app.services.job_objects import resolve_job_objects
 from app.services.migration_engine import (
     build_engine, create_target_table, migrate_table, table_exists,
     csv_table_exists, migrate_csv_to_db, migrate_db_to_csv, migrate_csv_to_csv,
@@ -182,10 +182,14 @@ def _load_job_sync(job_id: int) -> dict:
                            {"id": job.source_connection_id}).fetchone()
         tgt = conn.execute(text("SELECT * FROM database_connections WHERE id = :id"),
                            {"id": job.target_connection_id}).fetchone()
+        table_rows = conn.execute(
+            text("SELECT * FROM job_tables WHERE job_id = :id"), {"id": job_id}
+        ).fetchall()
     return {
         "job": dict(job._mapping),
         "src": dict(src._mapping),
         "tgt": dict(tgt._mapping),
+        "tables": [dict(r._mapping) for r in table_rows],
     }
 
 
@@ -229,8 +233,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
             tgt["username"], decrypt(tgt["password"] or "")
         )
 
-        tables = parse_source_tables(job.get("source_tables"))
-        table_filter = job.get("table_filter") or None
+        tables = resolve_job_objects(data.get("tables") or [])
         create_tgt = bool(job.get("create_target_table"))
         migration_mode = job.get("migration_mode") or "append"
         tgt_schema = job.get("target_schema") or None
@@ -244,10 +247,12 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         any_failed = False
         stopped = False
 
-        for table_entry in tables:
+        for obj in tables:
             if stop_event.is_set():
                 stopped = True
                 break
+            table_entry = obj.entry
+            table_filter = obj.table_filter   # per-object WHERE clause, or None
             # Parse schema.table or just table
             if "." in table_entry:
                 src_schema, src_table = table_entry.split(".", 1)

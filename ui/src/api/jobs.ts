@@ -1,11 +1,18 @@
 import client from './client'
 
+export interface JobTableItem {
+  schema_name?: string | null
+  object_name: string
+  table_filter?: string | null
+  enabled: boolean
+  position: number
+}
+
 export interface Job {
   id: number
   name: string
   source_connection_id: number
-  source_tables?: string
-  table_filter?: string
+  tables: JobTableItem[]
   target_connection_id: number
   target_schema?: string
   create_target_table: boolean

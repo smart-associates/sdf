@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Text, ForeignKey, Boolean, JSON
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -8,14 +9,41 @@ class Job(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False)
     source_connection_id = Column(Integer, ForeignKey("database_connections.id"), nullable=False)
-    source_tables = Column(Text)          # newline-separated: schema.table or table
-    table_filter = Column(Text)           # WHERE clause applied to all tables
+    # Object selection lives in the job_tables table (see JobTable): one include
+    # row per object, each with an optional per-object WHERE filter and ordering.
     target_connection_id = Column(Integer, ForeignKey("database_connections.id"), nullable=False)
     target_schema = Column(String(255))   # override target schema
     create_target_table = Column(Boolean, default=False)
     migration_mode = Column(String(50), default="append")  # append|truncate_load
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    tables = relationship(
+        "JobTable",
+        cascade="all, delete-orphan",
+        order_by="JobTable.position",
+        lazy="selectin",
+    )
+
+
+class JobTable(Base):
+    """One source-object selection for a job.
+
+    Each row names a single object to replicate (``schema_name`` + ``object_name``)
+    with an optional per-object WHERE filter. ``position`` sets migration order and
+    ``enabled`` lets a row be kept but skipped. Community is include-only and
+    literal-only — no glob patterns or catalog browsing (those stay Pro).
+    """
+    __tablename__ = "job_tables"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    schema_name = Column(String(255))                 # nullable when the object has no schema qualifier
+    object_name = Column(String(512), nullable=False)  # exact object name
+    table_filter = Column(Text)                        # per-object WHERE clause, or NULL
+    enabled = Column(Boolean, nullable=False, default=True)
+    position = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class JobExecution(Base):
     __tablename__ = "job_executions"

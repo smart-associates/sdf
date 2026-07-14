@@ -8,13 +8,14 @@ import StatusBadge from '../components/StatusBadge'
 import Modal from '../components/Modal'
 import SortableHeader from '../components/SortableHeader'
 import VendorIcon from '../components/VendorIcon'
+import TableViewPicker from '../components/TableViewPicker'
 import { useSortableData } from '../hooks/useSortableData'
 
 const MIGRATION_MODES = ['append', 'truncate_load'] as const
 
 function empty(): Partial<Job> {
   return {
-    name: '', source_connection_id: 0, source_tables: '', table_filter: '',
+    name: '', source_connection_id: 0, tables: [],
     target_connection_id: 0, target_schema: '', create_target_table: false, migration_mode: 'append'
   }
 }
@@ -103,8 +104,13 @@ export default function Jobs() {
   const openEdit = (j: Job) => { setForm({ ...j }); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('edit') }
 
   const handleSubmit = () => {
-    if (modal === 'create') createMut.mutate(form as any)
-    else if (form.id) updateMut.mutate({ id: form.id, data: form })
+    // Drop blank rows and renumber positions to the current visual order.
+    const cleaned = (form.tables || [])
+      .filter(r => (r.object_name || '').trim())
+      .map((r, i) => ({ ...r, object_name: r.object_name.trim(), position: i }))
+    const payload = { ...form, tables: cleaned }
+    if (modal === 'create') createMut.mutate(payload as any)
+    else if (form.id) updateMut.mutate({ id: form.id, data: payload })
   }
 
   const connName = (id: number) => connections.find(c => c.id === id)?.name || `#${id}`
@@ -261,12 +267,11 @@ export default function Jobs() {
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Tables (one per line, schema.table or table — prefix with # to disable)</label>
-                <textarea rows={4} className="w-full border rounded-lg px-3 py-2 text-sm font-mono" placeholder="public.users&#10;#public.orders&#10;public.products" value={form.source_tables || ''} onChange={e => setForm(f => ({ ...f, source_tables: e.target.value }))} />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Table Filter (WHERE clause, applied to all tables)</label>
-                <input className="w-full border rounded-lg px-3 py-2 text-sm font-mono" placeholder="created_at > '2024-01-01'" value={form.table_filter || ''} onChange={e => setForm(f => ({ ...f, table_filter: e.target.value }))} />
+                <label className="block text-xs font-medium text-gray-700 mb-1">Tables &amp; Views</label>
+                <TableViewPicker
+                  tables={form.tables || []}
+                  onTablesChange={(next) => setForm(f => ({ ...f, tables: next }))}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Migration Mode</label>

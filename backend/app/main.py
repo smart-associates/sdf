@@ -73,6 +73,46 @@ async def run_migrations():
         except Exception as e:
             logger.warning("Migration failed: %s — %s", stmt.strip().split('\n')[0], e)
 
+    await _migrate_source_tables_to_job_tables(engine, logger)
+
+
+async def _migrate_source_tables_to_job_tables(engine, logger):
+    """Backfill legacy jobs.source_tables / table_filter into the job_tables table.
+
+    One-time: each newline entry in source_tables becomes an include row (its
+    schema/name split on the first dot), carrying the old job-wide table_filter.
+    Then the two legacy columns are dropped. Postgres-only (run_migrations returns
+    early on SQLite, where job_tables is built fresh from the model).
+    """
+    from sqlalchemy import text as _text
+    from app.services.table_parser import parse_source_tables
+
+    async with engine.begin() as conn:
+        col = await conn.execute(_text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'jobs' AND column_name = 'source_tables'"
+        ))
+        if not col.first():
+            return  # already migrated
+        rows = (await conn.execute(_text(
+            "SELECT id, source_tables, table_filter FROM jobs"
+        ))).fetchall()
+        for job_id, source_tables, table_filter in rows:
+            existing = await conn.execute(
+                _text("SELECT 1 FROM job_tables WHERE job_id = :id LIMIT 1"), {"id": job_id})
+            if existing.first():
+                continue  # don't double-backfill
+            for pos, entry in enumerate(parse_source_tables(source_tables)):
+                schema, name = entry.split(".", 1) if "." in entry else (None, entry)
+                await conn.execute(_text(
+                    "INSERT INTO job_tables (job_id, schema_name, object_name, table_filter, enabled, position) "
+                    "VALUES (:job_id, :schema, :name, :filter, TRUE, :pos)"
+                ), {"job_id": job_id, "schema": schema or None, "name": name,
+                    "filter": table_filter or None, "pos": pos})
+        await conn.execute(_text("ALTER TABLE jobs DROP COLUMN IF EXISTS source_tables"))
+        await conn.execute(_text("ALTER TABLE jobs DROP COLUMN IF EXISTS table_filter"))
+        logger.info("Backfilled job_tables from legacy source_tables for %d job(s)", len(rows))
+
 async def recover_stale_executions():
     """Mark any orphaned 'running' executions as failed on startup."""
     from app.database import engine
