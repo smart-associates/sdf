@@ -8,6 +8,7 @@ import logging
 
 from app.core.config import settings
 from app.database import init_db
+from app.version import __version__
 from app.models import *  # noqa: ensure models are registered
 from app.routers import connections, jobs, executions, settings as settings_router
 
@@ -164,7 +165,7 @@ async def seed_defaults():
                 db.add(Setting(key=key, value=value, description=desc, data_type=dtype))
         await db.commit()
 
-app = FastAPI(title="SDF - Smart Data Frameworks", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="SDF - Smart Data Frameworks", version=__version__, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -181,7 +182,7 @@ app.include_router(settings_router.router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": __version__}
 
 
 _UI_DIST = Path(settings.ui_dist_dir)
