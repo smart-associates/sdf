@@ -26,10 +26,17 @@ export interface JobValidationItem {
   message: string
 }
 
+export interface TableQualification {
+  original: string
+  schema_name?: string | null
+  object_name: string
+}
+
 export interface JobValidationResult {
   valid: boolean
   items: JobValidationItem[]
   warnings: string[]
+  qualified: TableQualification[]
 }
 
 export interface JobExecuteResult {

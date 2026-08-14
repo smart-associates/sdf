@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from fastapi import APIRouter, Depends, HTTPException
 import sqlalchemy as sa
@@ -13,7 +14,10 @@ from app.services.job_runner import start_job_execution, stop_execution
 from app.services.encryption import decrypt
 from app.services.migration_engine import build_engine, table_exists, csv_table_exists, parquet_table_exists, avro_table_exists
 from app.services.clone_utils import next_copy_name
-from app.services.job_objects import resolve_job_objects
+from app.services.job_objects import resolve_job_objects, qualify_rows, entry_of
+from app.services.connection_introspect import get_schema_names, get_object_names
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -37,16 +41,20 @@ def _build_job_tables(items) -> list[JobTable]:
     return rows
 
 
-def _resolve_job_tables(job) -> list:
-    """Resolve a job's ORM job_tables rows into ordered ResolvedObjects."""
-    rows = [{
+def _job_table_rows(job) -> list[dict]:
+    """A job's ORM job_tables rows as plain dicts."""
+    return [{
         "schema_name": t.schema_name,
         "object_name": t.object_name,
         "table_filter": t.table_filter,
         "enabled": t.enabled,
         "position": t.position,
     } for t in job.tables]
-    return resolve_job_objects(rows)
+
+
+def _resolve_job_tables(job) -> list:
+    """Resolve a job's ORM job_tables rows into ordered ResolvedObjects."""
+    return resolve_job_objects(_job_table_rows(job))
 
 
 @router.get("", response_model=list[JobResponse])
@@ -156,7 +164,8 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
     warnings = []
     valid = True
 
-    resolved = _resolve_job_tables(job)
+    rows = _job_table_rows(job)
+    resolved = resolve_job_objects(rows)
     tables = [o.entry for o in resolved]
     if not tables:
         warnings.append("No source tables defined")
@@ -165,6 +174,7 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
         """Blocking: connect to source and check table existence."""
         _items = []
         _valid = True
+        _quals: list = []
         if src.db_type == "filesystem":
             fmt = src.staging_format or "parquet"
             if fmt in ("csv", "tsv"):
@@ -191,7 +201,27 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
             src_pw = decrypt(src.password or "")
             src_engine = build_engine(src.db_type, src.host, src.port, src.database, src.username, src_pw)
             try:
-                for obj in resolved:
+                # Qualify bare/mis-cased manual entries against the full source
+                # catalog, and use the result for the existence checks below so
+                # e.g. a bare name that only exists in a non-default schema
+                # reads as found, not "not found".
+                try:
+                    _quals = qualify_rows(
+                        rows,
+                        list_schemas=lambda: get_schema_names(src_engine),
+                        list_objects=lambda s: get_object_names(src_engine, s),
+                    )
+                except Exception as exc:
+                    logger.debug("qualify_rows failed: %s", exc)
+                    _quals = []
+                _qmap = {q["original"].lower(): q for q in _quals}
+                eff_rows = []
+                for r in rows:
+                    entry = entry_of(r.get("schema_name"), (r.get("object_name") or "").strip())
+                    q = _qmap.get(entry.lower())
+                    eff_rows.append({**r, "schema_name": q["schema_name"], "object_name": q["object_name"]} if q else r)
+                eff_resolved = resolve_job_objects(eff_rows)
+                for obj in eff_resolved:
                     exists = table_exists(src_engine, obj.name, obj.schema)
                     _items.append(JobValidationItem(
                         table_name=obj.entry,
@@ -202,10 +232,11 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
                         _valid = False
             finally:
                 src_engine.dispose()
-        return _items, _valid
+        return _items, _valid, _quals
 
+    qualified: list = []
     try:
-        src_items, src_valid = await asyncio.to_thread(_validate_source_tables)
+        src_items, src_valid, qualified = await asyncio.to_thread(_validate_source_tables)
         items.extend(src_items)
         if not src_valid:
             valid = False
@@ -258,7 +289,7 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
             warnings.append(f"Could not connect to target: {str(e)}")
             valid = False
 
-    return JobValidationResponse(valid=valid, items=items, warnings=warnings)
+    return JobValidationResponse(valid=valid, items=items, warnings=warnings, qualified=qualified)
 
 
 @router.post("/{job_id}/execute", response_model=JobExecuteResponse, status_code=202)

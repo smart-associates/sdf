@@ -1,4 +1,4 @@
-from app.services.job_objects import resolve_job_objects
+from app.services.job_objects import resolve_job_objects, qualify_rows
 
 
 def _row(**kw):
@@ -60,3 +60,66 @@ def test_blank_object_names_skipped():
         _row(object_name="real"),
     ])
     assert [o.name for o in out] == ["real"]
+
+
+# --- qualify_rows ------------------------------------------------------------
+
+CATALOG = {
+    "public": [
+        {"name": "orders", "schema": "public", "kind": "table"},
+        {"name": "users", "schema": "public", "kind": "table"},
+    ],
+    "sales": [
+        {"name": "ledger", "schema": "sales", "kind": "table"},
+    ],
+    "fin": [
+        {"name": "ledger", "schema": "fin", "kind": "table"},
+    ],
+}
+
+
+def _schemas():
+    return list(CATALOG.keys())
+
+
+def _objects(schema):
+    return CATALOG.get(schema, [])
+
+
+def test_qualify_bare_name_unique_match():
+    out = qualify_rows([_row(object_name="orders")], list_schemas=_schemas, list_objects=_objects)
+    assert out == [{"original": "orders", "schema_name": "public", "object_name": "orders"}]
+
+
+def test_qualify_bare_name_ambiguous_left_alone():
+    # "ledger" exists in both sales and fin -> ambiguous, left untouched.
+    out = qualify_rows([_row(object_name="ledger")], list_schemas=_schemas, list_objects=_objects)
+    assert out == []
+
+
+def test_qualify_case_corrects_qualified_name():
+    out = qualify_rows(
+        [_row(schema_name="Public", object_name="ORDERS")],
+        list_schemas=_schemas, list_objects=_objects,
+    )
+    assert out == [{"original": "Public.ORDERS", "schema_name": "public", "object_name": "orders"}]
+
+
+def test_qualify_already_canonical_produces_no_suggestion():
+    out = qualify_rows(
+        [_row(schema_name="public", object_name="orders")],
+        list_schemas=_schemas, list_objects=_objects,
+    )
+    assert out == []
+
+
+def test_qualify_unknown_name_produces_no_suggestion():
+    out = qualify_rows([_row(object_name="does_not_exist")], list_schemas=_schemas, list_objects=_objects)
+    assert out == []
+
+
+def test_qualify_skips_scan_when_no_entries():
+    def boom():
+        raise AssertionError("should not scan")
+    out = qualify_rows([_row(object_name="  ")], list_schemas=boom, list_objects=_objects)
+    assert out == []

@@ -56,10 +56,16 @@ class JobValidationItem(BaseModel):
     exists: bool
     message: str
 
+class TableQualification(BaseModel):
+    original: str                  # the entry as currently stored (e.g. "orders")
+    schema_name: Optional[str] = None
+    object_name: str
+
 class JobValidationResponse(BaseModel):
     valid: bool
     items: list[JobValidationItem]
     warnings: list[str]
+    qualified: list[TableQualification] = []  # bare/mis-cased entries resolved against the source catalog
 
 class JobExecuteResponse(BaseModel):
     execution_id: int

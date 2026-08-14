@@ -79,7 +79,23 @@ export default function Jobs() {
 
   const validateMut = useMutation({
     mutationFn: (id: number) => validateJob(id),
-    onSuccess: (r) => setValidation(r),
+    onSuccess: (r) => {
+      setValidation(r)
+      // Apply the source-catalog qualifications to the open form (matched by
+      // the entry as currently typed). Save persists them; unmatched rows are
+      // left untouched.
+      if (r.qualified.length) {
+        const qmap = new Map(r.qualified.map(q => [q.original.toLowerCase(), q]))
+        setForm(f => ({
+          ...f,
+          tables: (f.tables || []).map(t => {
+            const entry = t.schema_name ? `${t.schema_name}.${t.object_name ?? ''}` : (t.object_name ?? '')
+            const q = qmap.get(entry.toLowerCase())
+            return q ? { ...t, schema_name: q.schema_name ?? null, object_name: q.object_name } : t
+          }),
+        }))
+      }
+    },
   })
 
   const executeMut = useMutation({
@@ -255,6 +271,12 @@ export default function Jobs() {
                 {validation.warnings.map((w: string, i: number) => (
                   <div key={i} className="text-yellow-700 mt-1">⚠ {w}</div>
                 ))}
+                {validation.qualified.length > 0 && (
+                  <div className="mt-2 text-blue-700 text-xs">
+                    Qualified {validation.qualified.length} entr{validation.qualified.length !== 1 ? 'ies' : 'y'} against the source catalog (save to keep):{' '}
+                    {validation.qualified.map((q: any) => `${q.original} → ${q.schema_name ? `${q.schema_name}.${q.object_name}` : q.object_name}`).join(', ')}
+                  </div>
+                )}
               </div>
             )}
 
