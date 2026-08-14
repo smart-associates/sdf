@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import { getSettings, updateSetting, Setting } from '../api/settings'
+import { errorMessage } from '../api/client'
 
 export default function Settings() {
   const qc = useQueryClient()
@@ -28,7 +29,7 @@ export default function Settings() {
       timersRef.current[vars.id] = setTimeout(() => setSaved(s => ({ ...s, [vars.id]: false })), 2000)
     },
     onError: (e: any, vars) => {
-      setSaveError(s => ({ ...s, [vars.id]: e.response?.data?.detail || 'Save failed' }))
+      setSaveError(s => ({ ...s, [vars.id]: errorMessage(e, 'Save failed') }))
     },
   })
 

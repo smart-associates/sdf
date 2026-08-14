@@ -5,6 +5,7 @@ import {
   getConnections, createConnection, updateConnection,
   deleteConnection, testConnection, cloneConnection, DatabaseConnection
 } from '../api/connections'
+import { errorMessage } from '../api/client'
 import Modal from '../components/Modal'
 import ConnectionCard from '../components/ConnectionCard'
 import { VENDOR_LABEL } from '../components/VendorIcon'
@@ -30,19 +31,19 @@ export default function Connections() {
   const createMut = useMutation({
     mutationFn: (d: Omit<DatabaseConnection, 'id'>) => createConnection(d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); setForm(empty()); setError(''); setModal(null) },
-    onError: (e: any) => setError(e.response?.data?.detail || 'Error'),
+    onError: (e: any) => setError(errorMessage(e)),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<DatabaseConnection> }) => updateConnection(id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['connections'] }); setForm(empty()); setError(''); setModal(null) },
-    onError: (e: any) => setError(e.response?.data?.detail || 'Error'),
+    onError: (e: any) => setError(errorMessage(e)),
   })
 
   const deleteMut = useMutation({
     mutationFn: deleteConnection,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
-    onError: (e: any) => alert(e.response?.data?.detail || 'Cannot delete'),
+    onError: (e: any) => alert(errorMessage(e, 'Cannot delete')),
   })
 
   const testMut = useMutation({
@@ -56,7 +57,7 @@ export default function Connections() {
   const cloneMut = useMutation({
     mutationFn: cloneConnection,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['connections'] }),
-    onError: (e: any) => alert(e.response?.data?.detail || 'Clone failed'),
+    onError: (e: any) => alert(errorMessage(e, 'Clone failed')),
   })
 
   const openCreate = () => { setForm(empty()); setError(''); setTestResult(null); createMut.reset(); updateMut.reset(); setModal('create') }

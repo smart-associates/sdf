@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Edit2, Play, CheckCircle, Square, Copy } from 'lucide-react'
 import { getJobs, createJob, updateJob, deleteJob, validateJob, executeJob, cloneJob, Job } from '../api/jobs'
+import { errorMessage } from '../api/client'
 import { getConnections } from '../api/connections'
 import { getExecution, stopExecution } from '../api/executions'
 import StatusBadge from '../components/StatusBadge'
@@ -60,19 +61,19 @@ export default function Jobs() {
   const createMut = useMutation({
     mutationFn: (d: Omit<Job, 'id'>) => createJob(d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); skipDirtyRef.current = true; setIsDirty(false); setForm(empty()); setError(''); setModal(null) },
-    onError: (e: any) => setError(e.response?.data?.detail || 'Error'),
+    onError: (e: any) => setError(errorMessage(e)),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Job> }) => updateJob(id, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); skipDirtyRef.current = true; setIsDirty(false); setForm(empty()); setError(''); setModal(null) },
-    onError: (e: any) => setError(e.response?.data?.detail || 'Error'),
+    onError: (e: any) => setError(errorMessage(e)),
   })
 
   const deleteMut = useMutation({
     mutationFn: deleteJob,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
-    onError: (e: any) => alert(e.response?.data?.detail || 'Cannot delete'),
+    onError: (e: any) => alert(errorMessage(e, 'Cannot delete')),
   })
 
   const validateMut = useMutation({
@@ -88,7 +89,7 @@ export default function Jobs() {
       setModal('execution')
       qc.invalidateQueries({ queryKey: ['jobs'] })
     },
-    onError: (e: any) => alert(e.response?.data?.detail || 'Execute failed'),
+    onError: (e: any) => alert(errorMessage(e, 'Execute failed')),
     onSettled: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   })
 
@@ -98,13 +99,13 @@ export default function Jobs() {
       qc.invalidateQueries({ queryKey: ['execution', executionId] })
       qc.invalidateQueries({ queryKey: ['jobs'] })
     },
-    onError: (e: any) => alert(e.response?.data?.detail || 'Stop failed'),
+    onError: (e: any) => alert(errorMessage(e, 'Stop failed')),
   })
 
   const cloneMut = useMutation({
     mutationFn: cloneJob,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
-    onError: (e: any) => alert(e.response?.data?.detail || 'Clone failed'),
+    onError: (e: any) => alert(errorMessage(e, 'Clone failed')),
   })
 
   const openCreate = () => { skipDirtyRef.current = true; setIsDirty(false); setForm(empty()); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('create') }
