@@ -2,6 +2,7 @@ import { Copy, Edit2, Plug, Trash2 } from 'lucide-react'
 import { DatabaseConnection } from '../api/connections'
 import StatusBadge from './StatusBadge'
 import VendorIcon, { VENDOR_LABEL } from './VendorIcon'
+import KebabMenu from './KebabMenu'
 
 interface Props {
   connection: DatabaseConnection
@@ -20,11 +21,6 @@ export default function ConnectionCard({ connection: c, onEdit, onTest, onClone,
       e.preventDefault()
       onEdit()
     }
-  }
-
-  const stop = (fn: () => void) => (e: React.MouseEvent) => {
-    e.stopPropagation()
-    fn()
   }
 
   return (
@@ -46,6 +42,14 @@ export default function ConnectionCard({ connection: c, onEdit, onTest, onClone,
             {isFs && c.staging_format ? ` · ${c.staging_format}` : ''}
           </div>
         </div>
+        <KebabMenu
+          items={[
+            { label: testing ? 'Testing…' : 'Test connection', icon: <Plug size={14} />, onClick: onTest, disabled: testing },
+            { label: 'Edit', icon: <Edit2 size={14} />, onClick: onEdit },
+            { label: 'Clone', icon: <Copy size={14} />, onClick: onClone },
+            { label: 'Delete', icon: <Trash2 size={14} />, onClick: onDelete, danger: true, confirm: 'Delete connection?' },
+          ]}
+        />
       </div>
 
       <div className="text-sm text-gray-600 space-y-1">
@@ -67,37 +71,6 @@ export default function ConnectionCard({ connection: c, onEdit, onTest, onClone,
               {c.last_test_error}
             </span>
           )}
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={stop(onTest)}
-            disabled={testing}
-            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-gray-50 rounded disabled:opacity-50"
-            title="Test connection"
-          >
-            <Plug size={15} />
-          </button>
-          <button
-            onClick={stop(onEdit)}
-            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-gray-50 rounded"
-            title="Edit"
-          >
-            <Edit2 size={15} />
-          </button>
-          <button
-            onClick={stop(onClone)}
-            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-gray-50 rounded"
-            title="Clone"
-          >
-            <Copy size={15} />
-          </button>
-          <button
-            onClick={stop(() => { if (confirm('Delete connection?')) onDelete() })}
-            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-gray-50 rounded"
-            title="Delete"
-          >
-            <Trash2 size={15} />
-          </button>
         </div>
       </div>
     </div>

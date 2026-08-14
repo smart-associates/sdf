@@ -10,6 +10,7 @@ import Modal from '../components/Modal'
 import SortableHeader from '../components/SortableHeader'
 import VendorIcon from '../components/VendorIcon'
 import TableViewPicker from '../components/TableViewPicker'
+import KebabMenu from '../components/KebabMenu'
 import { useSortableData } from '../hooks/useSortableData'
 
 const MIGRATION_MODES = ['append', 'truncate_load'] as const
@@ -181,7 +182,7 @@ export default function Jobs() {
                 <td className="px-4 py-3 text-xs text-gray-500 capitalize">{j.migration_mode.replace('_', ' ')}</td>
                 <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                   <div className="flex items-center gap-2 justify-end">
-                    {j.running_execution_id ? (
+                    {j.running_execution_id && (
                       <button
                         onClick={() => { setExecutionId(j.running_execution_id!); setExecJobId(j.id); setModal('execution') }}
                         className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
@@ -190,20 +191,17 @@ export default function Jobs() {
                         <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
                         Running
                       </button>
-                    ) : (
-                      <button onClick={() => executeMut.mutate(j.id)} disabled={executeMut.isPending && executeMut.variables === j.id} className="p-1 text-gray-400 hover:text-green-600" title="Execute">
-                        <Play size={15} />
-                      </button>
                     )}
-                    <button onClick={() => openEdit(j)} className="p-1 text-gray-400 hover:text-blue-600" title="Edit">
-                      <Edit2 size={15} />
-                    </button>
-                    <button onClick={() => cloneMut.mutate(j.id)} className="p-1 text-gray-400 hover:text-blue-600" title="Clone">
-                      <Copy size={15} />
-                    </button>
-                    <button onClick={() => { if (confirm('Delete job?')) deleteMut.mutate(j.id) }} className="p-1 text-gray-400 hover:text-red-600" title="Delete">
-                      <Trash2 size={15} />
-                    </button>
+                    <KebabMenu
+                      items={[
+                        j.running_execution_id
+                          ? { label: 'View running execution', icon: <Play size={14} />, onClick: () => { setExecutionId(j.running_execution_id!); setExecJobId(j.id); setModal('execution') } }
+                          : { label: executeMut.isPending && executeMut.variables === j.id ? 'Executing…' : 'Execute', icon: <Play size={14} />, onClick: () => executeMut.mutate(j.id), disabled: executeMut.isPending && executeMut.variables === j.id },
+                        { label: 'Edit', icon: <Edit2 size={14} />, onClick: () => openEdit(j) },
+                        { label: 'Clone', icon: <Copy size={14} />, onClick: () => cloneMut.mutate(j.id) },
+                        { label: 'Delete', icon: <Trash2 size={14} />, onClick: () => deleteMut.mutate(j.id), danger: true, confirm: 'Delete job?' },
+                      ]}
+                    />
                   </div>
                 </td>
               </tr>
