@@ -282,6 +282,8 @@ export default function Jobs() {
                 <TableViewPicker
                   tables={form.tables || []}
                   onTablesChange={(next) => setForm(f => ({ ...f, tables: next }))}
+                  sourceConnectionId={form.source_connection_id || undefined}
+                  sourceType={sortedConnections.find(c => c.id === form.source_connection_id)?.db_type}
                 />
               </div>
               <div>

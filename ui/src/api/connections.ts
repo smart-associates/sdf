@@ -42,3 +42,24 @@ export const testConnection = (id: number) =>
 
 export const cloneConnection = (id: number) =>
   client.post<DatabaseConnection>(`/connections/${id}/clone`).then(r => r.data)
+
+export interface ConnectionObject {
+  name: string
+  schema: string | null
+  kind: 'table' | 'view'
+}
+
+export interface ConnectionFile {
+  name: string
+  table: string
+}
+
+export const listConnectionSchemas = (id: number) =>
+  client.get<{ schemas: string[] }>(`/connections/${id}/schemas`).then(r => r.data.schemas)
+
+export const listConnectionObjects = (id: number, schema?: string) =>
+  client.get<{ objects: ConnectionObject[] }>(`/connections/${id}/objects`, { params: schema ? { schema } : {} })
+    .then(r => r.data.objects)
+
+export const listConnectionFiles = (id: number) =>
+  client.get<{ files: ConnectionFile[] }>(`/connections/${id}/files`).then(r => r.data.files)

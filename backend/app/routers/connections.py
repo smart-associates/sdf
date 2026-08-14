@@ -1,3 +1,6 @@
+import asyncio
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
@@ -6,6 +9,7 @@ from app.schemas.connection import (
     DatabaseConnectionResponse, ConnectionTestResponse
 )
 from app.services import connection_service as svc
+from app.services import connection_introspect
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 
@@ -53,3 +57,48 @@ async def clone_connection(conn_id: int, db: AsyncSession = Depends(get_db)):
     if not clone:
         raise HTTPException(404, "Connection not found")
     return clone
+
+@router.get("/{conn_id}/schemas")
+async def list_connection_schemas(conn_id: int, db: AsyncSession = Depends(get_db)):
+    conn = await svc.get_connection_raw(db, conn_id)
+    if not conn:
+        raise HTTPException(404, "Connection not found")
+    try:
+        schemas = await connection_introspect.list_schemas(conn)
+    except connection_introspect.IntrospectError as e:
+        raise HTTPException(400, str(e))
+    except asyncio.TimeoutError:
+        raise HTTPException(504, f"Schema listing timed out after {connection_introspect.INTROSPECT_TIMEOUT}s")
+    except Exception as e:
+        raise HTTPException(502, f"Could not list schemas: {str(e)[:255]}")
+    return {"schemas": schemas}
+
+@router.get("/{conn_id}/objects")
+async def list_connection_objects(conn_id: int, schema: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    conn = await svc.get_connection_raw(db, conn_id)
+    if not conn:
+        raise HTTPException(404, "Connection not found")
+    try:
+        objects = await connection_introspect.list_objects(conn, schema=schema)
+    except connection_introspect.IntrospectError as e:
+        raise HTTPException(400, str(e))
+    except asyncio.TimeoutError:
+        raise HTTPException(504, f"Object listing timed out after {connection_introspect.INTROSPECT_TIMEOUT}s")
+    except Exception as e:
+        raise HTTPException(502, f"Could not list objects: {str(e)[:255]}")
+    return {"objects": objects}
+
+@router.get("/{conn_id}/files")
+async def list_connection_files(conn_id: int, db: AsyncSession = Depends(get_db)):
+    conn = await svc.get_connection_raw(db, conn_id)
+    if not conn:
+        raise HTTPException(404, "Connection not found")
+    try:
+        files = await connection_introspect.list_files(conn)
+    except connection_introspect.IntrospectError as e:
+        raise HTTPException(400, str(e))
+    except asyncio.TimeoutError:
+        raise HTTPException(504, f"File listing timed out after {connection_introspect.INTROSPECT_TIMEOUT}s")
+    except Exception as e:
+        raise HTTPException(502, f"Could not list files: {str(e)[:255]}")
+    return {"files": files}

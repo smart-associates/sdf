@@ -42,14 +42,14 @@ def get_jdbc_url(conn: DatabaseConnection, plaintext_password: str) -> str:
     return str(url)
 
 
-def _build_engine(conn: DatabaseConnection, plaintext_password: str):
+def build_engine(conn: DatabaseConnection, plaintext_password: str):
     if conn.db_type not in _DRIVERS:
         raise ValueError(f"Unknown db_type: {conn.db_type}")
     port = conn.port or DEFAULT_PORTS.get(conn.db_type, 5432)
     url = URL.create(_DRIVERS[conn.db_type], username=conn.username,
                      password=plaintext_password, host=conn.host,
                      port=port, database=conn.database)
-    return sa.create_engine(url, pool_pre_ping=True)
+    return sa.create_engine(url, pool_pre_ping=True, connect_args=_connect_timeout_args(conn.db_type))
 
 
 async def list_connections(db: AsyncSession) -> list[DatabaseConnection]:
