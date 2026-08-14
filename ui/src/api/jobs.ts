@@ -16,7 +16,7 @@ export interface Job {
   target_connection_id: number
   target_schema?: string
   create_target_table: boolean
-  migration_mode: 'full' | 'truncate_load' | 'append'
+  migration_mode: 'truncate_load' | 'append'
   running_execution_id?: number
 }
 

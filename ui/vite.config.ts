@@ -2,8 +2,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const buildDate = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __BUILD_DATE__: JSON.stringify(buildDate),
+  },
   server: {
     host: true,
     port: 5173,

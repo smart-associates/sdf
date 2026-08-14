@@ -102,6 +102,11 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+      {!collapsed && (
+        <div className="border-t border-gray-700 px-4 py-2 text-[10px] text-gray-500 leading-tight">
+          build <span className="font-mono">{__BUILD_DATE__}</span>
+        </div>
+      )}
     </aside>
   )
 }
