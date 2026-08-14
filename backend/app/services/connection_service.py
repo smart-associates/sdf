@@ -4,6 +4,7 @@ from sqlalchemy.engine import URL
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import set_committed_value
 from datetime import datetime, timezone
 from app.models.connection import DatabaseConnection
 from app.services.encryption import encrypt, decrypt, mask, is_masked, MASKED, DecryptionError
@@ -41,7 +42,10 @@ async def list_connections(db: AsyncSession) -> list[DatabaseConnection]:
     result = await db.execute(select(DatabaseConnection).order_by(DatabaseConnection.id))
     conns = result.scalars().all()
     for c in conns:
-        c.password = MASKED
+        # Mask without dirtying the session — a plain assignment would be flushed
+        # to the DB by autoflush on the next query in this request, overwriting
+        # the stored ciphertext with the literal "********".
+        set_committed_value(c, "password", MASKED)
     return list(conns)
 
 
@@ -49,7 +53,7 @@ async def get_connection(db: AsyncSession, conn_id: int) -> Optional[DatabaseCon
     result = await db.execute(select(DatabaseConnection).where(DatabaseConnection.id == conn_id))
     conn = result.scalar_one_or_none()
     if conn:
-        conn.password = MASKED
+        set_committed_value(conn, "password", MASKED)
     return conn
 
 
@@ -66,7 +70,7 @@ async def create_connection(db: AsyncSession, data: dict) -> DatabaseConnection:
     db.add(conn)
     await db.commit()
     await db.refresh(conn)
-    conn.password = MASKED
+    set_committed_value(conn, "password", MASKED)
     return conn
 
 
@@ -88,7 +92,7 @@ async def update_connection(db: AsyncSession, conn_id: int, data: dict) -> Optio
     conn.last_test_error = None
     await db.commit()
     await db.refresh(conn)
-    conn.password = MASKED
+    set_committed_value(conn, "password", MASKED)
     return conn
 
 
@@ -111,7 +115,7 @@ async def clone_connection(db: AsyncSession, conn_id: int) -> Optional[DatabaseC
     db.add(clone)
     await db.commit()
     await db.refresh(clone)
-    clone.password = MASKED
+    set_committed_value(clone, "password", MASKED)
     return clone
 
 
