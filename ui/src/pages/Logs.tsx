@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { getExecutions, getExecutionLogs, Execution, ExecutionTable, LogEntry } from '../api/executions'
 import { getJobs } from '../api/jobs'
@@ -54,11 +55,18 @@ function duration(e: Execution): string {
 
 export default function Logs() {
   const PAGE_SIZE = 50
+  const [searchParams] = useSearchParams()
+  const initialJob = searchParams.get('job_id')
+  const initialStatus = searchParams.get('status') || ''
+  const initialDays = searchParams.get('days')
+  const initialHideEmpty = searchParams.get('hide_empty') === '1'
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [filterJob, setFilterJob] = useState<number | ''>('')
-  const [filterDays, setFilterDays] = useState<number | ''>(7)
-  const [filterStatus, setFilterStatus] = useState<string>('')
-  const [hideEmpty, setHideEmpty] = useState<boolean>(false)
+  const [filterJob, setFilterJob] = useState<number | ''>(initialJob ? +initialJob : '')
+  const [filterDays, setFilterDays] = useState<number | ''>(
+    initialDays !== null ? (initialDays === '' ? '' : +initialDays) : 7
+  )
+  const [filterStatus, setFilterStatus] = useState<string>(initialStatus)
+  const [hideEmpty, setHideEmpty] = useState<boolean>(initialHideEmpty)
   const [page, setPage] = useState(0)
 
   const { data: executions = [], isLoading } = useQuery({

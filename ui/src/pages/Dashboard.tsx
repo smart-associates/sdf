@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { getStats } from '../api/executions'
 import { getConnections } from '../api/connections'
@@ -9,9 +10,12 @@ import StatusBadge from '../components/StatusBadge'
 const COLORS = { success: '#22c55e', failed: '#ef4444', running: '#3b82f6', cancelled: '#eab308' }
 type StatusKey = keyof typeof COLORS
 
-function StatCard({ label, value, sub }: { label: string; value: number | string; sub?: string }) {
+function StatCard({ label, value, sub, onClick }: { label: string; value: number | string; sub?: string; onClick?: () => void }) {
   return (
-    <div className="bg-white rounded-xl p-5 shadow-sm border">
+    <div
+      className={`bg-white rounded-xl p-5 shadow-sm border ${onClick ? 'cursor-pointer hover:shadow-md hover:border-gray-300 transition' : ''}`}
+      onClick={onClick}
+    >
       <p className="text-sm text-gray-500">{label}</p>
       <p className="text-3xl font-bold mt-1">{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
@@ -19,8 +23,35 @@ function StatCard({ label, value, sub }: { label: string; value: number | string
   )
 }
 
+function fmtDuration(started: string, completed?: string): string {
+  if (!completed) return '—'
+  const ms = new Date(completed).getTime() - new Date(started).getTime()
+  return ms < 60000 ? `${Math.round(ms / 1000)}s` : `${Math.round(ms / 60000)}m`
+}
+
+function ClickableCard({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <div
+      className="bg-white rounded-xl p-5 shadow-sm border cursor-pointer hover:shadow-md hover:border-gray-300 transition"
+      onClick={onClick}
+    >
+      {children}
+    </div>
+  )
+}
+
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [filterDays, setFilterDays] = useState<number | ''>(7)
+
+  const goToLogs = (params: Record<string, string | number> = {}) => {
+    const qs = new URLSearchParams()
+    for (const [k, v] of Object.entries(params)) qs.set(k, String(v))
+    if (filterDays) qs.set('days', String(filterDays))
+    const s = qs.toString()
+    navigate(s ? `/logs?${s}` : '/logs')
+  }
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ['stats', filterDays],
     queryFn: () => getStats(filterDays ? +filterDays : undefined),
@@ -31,10 +62,10 @@ export default function Dashboard() {
 
   const pieData = stats
     ? [
-        { name: 'Success', value: stats.success_count, color: COLORS.success },
-        { name: 'Failed', value: stats.failed_count, color: COLORS.failed },
-        { name: 'Running', value: stats.running_count, color: COLORS.running },
-        { name: 'Cancelled', value: stats.cancelled_count, color: COLORS.cancelled },
+        { name: 'Success', value: stats.success_count, color: COLORS.success, status: 'success' },
+        { name: 'Failed', value: stats.failed_count, color: COLORS.failed, status: 'failed' },
+        { name: 'Running', value: stats.running_count, color: COLORS.running, status: 'running' },
+        { name: 'Cancelled', value: stats.cancelled_count, color: COLORS.cancelled, status: 'cancelled' },
       ].filter(d => d.value > 0)
     : []
 
@@ -42,6 +73,7 @@ export default function Dashboard() {
     .filter(p => p.record_count > 0)
     .map(p => ({
       id: p.id,
+      job_id: p.job_id,
       label: p.job_name,
       started_at: p.started_at,
       status: p.status,
@@ -118,10 +150,14 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Runs" value={stats?.total_runs || 0} />
-        <StatCard label="Successful" value={stats?.success_count || 0} />
-        <StatCard label="Failed" value={stats?.failed_count || 0} />
-        <StatCard label="Records Migrated" value={(stats?.total_records || 0).toLocaleString()} />
+        <StatCard label="Total Runs" value={stats?.total_runs || 0} onClick={() => goToLogs()} />
+        <StatCard label="Successful" value={stats?.success_count || 0} onClick={() => goToLogs({ status: 'success' })} />
+        <StatCard label="Failed" value={stats?.failed_count || 0} onClick={() => goToLogs({ status: 'failed' })} />
+        <StatCard
+          label="Records Migrated"
+          value={(stats?.total_records || 0).toLocaleString()}
+          onClick={() => goToLogs({ hide_empty: 1 })}
+        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -141,6 +177,8 @@ export default function Dashboard() {
                   dataKey="value"
                   labelLine
                   label={renderPieLabel}
+                  onClick={(d: any) => goToLogs({ status: d.status })}
+                  className="cursor-pointer"
                 >
 
                   {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
@@ -182,7 +220,13 @@ export default function Dashboard() {
                   }}
                   formatter={(v: number) => [v.toLocaleString(), 'Records']}
                 />
-                <Bar dataKey="records" maxBarSize={10} radius={[3, 3, 0, 0]}>
+                <Bar
+                  dataKey="records"
+                  maxBarSize={10}
+                  radius={[3, 3, 0, 0]}
+                  onClick={(d: any) => goToLogs({ job_id: d.job_id })}
+                  className="cursor-pointer"
+                >
                   {timelineData.map(p => (
                     <Cell key={p.id} fill={COLORS[p.status as StatusKey] || COLORS.running} />
                   ))}
@@ -196,7 +240,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl p-5 shadow-sm border">
+        <ClickableCard onClick={() => navigate('/connections')}>
           <h2 className="text-sm font-semibold mb-3">Connection Types</h2>
           <div className="space-y-2">
             {Object.entries(dbTypeCounts).map(([type, count]) => (
@@ -213,9 +257,9 @@ export default function Dashboard() {
             ))}
             {connections.length === 0 && <p className="text-sm text-gray-400">No connections</p>}
           </div>
-        </div>
+        </ClickableCard>
 
-        <div className="bg-white rounded-xl p-5 shadow-sm border">
+        <ClickableCard onClick={() => navigate('/connections')}>
           <h2 className="text-sm font-semibold mb-3">Recent Connections</h2>
           <div className="space-y-2">
             {connections.slice(0, 5).map(c => (
@@ -226,9 +270,9 @@ export default function Dashboard() {
             ))}
             {connections.length === 0 && <p className="text-sm text-gray-400">No connections</p>}
           </div>
-        </div>
+        </ClickableCard>
 
-        <div className="bg-white rounded-xl p-5 shadow-sm border">
+        <ClickableCard onClick={() => navigate('/jobs')}>
           <h2 className="text-sm font-semibold mb-3">Recent Jobs</h2>
           <div className="space-y-2">
             {jobs.slice(0, 5).map(j => (
@@ -239,30 +283,33 @@ export default function Dashboard() {
             ))}
             {jobs.length === 0 && <p className="text-sm text-gray-400">No jobs</p>}
           </div>
-        </div>
+        </ClickableCard>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border">
+      <div
+        className="bg-white rounded-xl shadow-sm border cursor-pointer hover:shadow-md hover:border-gray-300 transition"
+        onClick={() => goToLogs()}
+      >
         <div className="p-4 border-b">
           <h2 className="text-sm font-semibold">Recent Executions</h2>
         </div>
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">ID</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Job</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Status</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Records</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Duration</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Started</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {(stats?.recent_executions || []).map(e => (
               <tr key={e.id} className="hover:bg-gray-50">
-                <td className="px-4 py-2 font-mono">#{e.id}</td>
-                <td className="px-4 py-2">#{e.job_id}</td>
+                <td className="px-4 py-2">{jobs.find(j => j.id === e.job_id)?.name || `Job #${e.job_id}`}</td>
                 <td className="px-4 py-2"><StatusBadge status={e.status} /></td>
                 <td className="px-4 py-2">{(e.record_count || 0).toLocaleString()}</td>
+                <td className="px-4 py-2 text-gray-500">{fmtDuration(e.started_at, e.completed_at)}</td>
                 <td className="px-4 py-2 text-gray-500">{new Date(e.started_at).toLocaleString()}</td>
               </tr>
             ))}
