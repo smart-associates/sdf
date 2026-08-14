@@ -1,10 +1,10 @@
 """API tests for the job_tables selection model on the jobs endpoints."""
 
 
-async def _make_conn(client, name):
+async def _make_conn(client, name, directory=None, staging_format="parquet"):
     resp = await client.post("/api/connections", json={
-        "name": name, "db_type": "filesystem", "database": f"/tmp/{name}",
-        "staging_format": "parquet",
+        "name": name, "db_type": "filesystem", "database": directory or f"/tmp/{name}",
+        "staging_format": staging_format,
     })
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
@@ -64,3 +64,22 @@ async def test_update_job_replaces_tables(client):
     resp = await client.put(f"/api/jobs/{created['id']}", json=payload)
     assert resp.status_code == 200, resp.text
     assert [t["object_name"] for t in resp.json()["tables"]] == ["b", "c"]
+
+
+async def test_validate_job_resolves_dotted_filesystem_filename(client, tmp_path):
+    """A filesystem source file literally named "title.ratings.csv" must be
+    resolved by its full stem, not mis-split into a fake "title" schema and
+    "ratings" table (issue #10)."""
+    (tmp_path / "title.ratings.csv").write_text("id,rating\n1,5\n")
+    src = await _make_conn(client, "src", directory=str(tmp_path), staging_format="csv")
+    tgt = await _make_conn(client, "tgt", directory=str(tmp_path / "out"))
+
+    created = (await client.post("/api/jobs", json=await _job_payload(
+        src, tgt, [{"object_name": "title.ratings", "position": 0}]))).json()
+
+    resp = await client.post(f"/api/jobs/{created['id']}/validate")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["items"][0]["exists"] is True
+    assert body["items"][0]["message"] == "CSV file found"
+    assert body["valid"] is True

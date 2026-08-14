@@ -19,6 +19,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     await run_migrations()
     await recover_stale_executions()
+    await migrate_batch_size_setting()
     await seed_defaults()
     yield
     # Graceful shutdown: signal running jobs and wait for threads to finish
@@ -146,15 +147,42 @@ async def recover_stale_executions():
         await conn.execute(update_tables, {"ids": exec_ids})
 
 
+async def migrate_batch_size_setting():
+    """One-time rename: the legacy global `batch_size` setting became the
+    `maximum_batch_size` ceiling (the per-table batch size now scales with the
+    table's estimated row count). Copy the existing value onto the new key,
+    then delete the old row. Idempotent — a no-op once the legacy row is gone.
+    """
+    from app.database import AsyncSessionLocal
+    from app.models.setting import Setting
+    from sqlalchemy import select, delete
+
+    async with AsyncSessionLocal() as db:
+        old = (await db.execute(select(Setting).where(Setting.key == "batch_size"))).scalar_one_or_none()
+        if old is None:
+            return
+        new = (await db.execute(select(Setting).where(Setting.key == "maximum_batch_size"))).scalar_one_or_none()
+        if new is None:
+            db.add(Setting(
+                key="maximum_batch_size",
+                value=old.value,
+                description="Maximum rows per batch; the actual batch size scales with each table's estimated row count",
+                data_type="integer",
+            ))
+        await db.execute(delete(Setting).where(Setting.key == "batch_size"))
+        await db.commit()
+
+
 async def seed_defaults():
     from app.database import AsyncSessionLocal
     from app.models.setting import Setting
     from sqlalchemy import select
 
     defaults = [
-        ("batch_size", "1000", "Number of rows per INSERT batch", "integer"),
+        ("maximum_batch_size", "100000", "Maximum rows per batch; the actual batch size scales with each table's estimated row count", "integer"),
         ("csv_quoting", "none", "Quote character for CSV export: none (backslash escape), single, or double", "string"),
         ("csv_delimiter", ",", "Field delimiter for CSV output. Use escape sequences for control characters: \\t (tab), \\001 (SOH), etc.", "string"),
+        ("csv_null_value", "", "Sentinel string written for NULL fields in CSV output and recognized as NULL when reading CSV back in. Leave blank for empty-string NULLs (NULL and '' are indistinguishable).", "string"),
         ("csv_header", "true", "Include column headers in CSV export", "boolean"),
         ("log_level", "minimal", "Logging verbosity for job executions: minimal (key events only) or detailed (includes batch progress)", "string"),
     ]

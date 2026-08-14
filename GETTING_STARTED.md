@@ -298,7 +298,7 @@ Navigate to **Settings** to configure system-wide defaults. The following settin
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `batch_size` | `1000` | Number of rows per INSERT batch |
+| `maximum_batch_size` | `100000` | Upper bound on rows per batch. The actual batch size is chosen per table as ~1% of its estimated row count (floored at 1,000), so small tables use small batches and large tables ramp up to this ceiling. |
 
 You can add additional custom settings via the Settings page or the `/api/settings` API endpoint.
 

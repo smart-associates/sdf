@@ -200,6 +200,20 @@ def get_table_names(engine: Engine, schema: Optional[str] = None) -> list[str]:
         return insp.get_table_names(schema=schema)
 
 
+ADAPTIVE_BATCH_FACTOR = 0.01   # batch ≈ 1% of estimated table rows
+ADAPTIVE_BATCH_FLOOR = 1000    # never batch smaller than this
+
+
+def adaptive_batch_size(estimated_rows: Optional[int], maximum_batch_size: int) -> int:
+    """Scale batch size to table size: ~1% of the estimated row count, clamped
+    to [ADAPTIVE_BATCH_FLOOR, maximum_batch_size]. Returns maximum_batch_size
+    when the estimate is unknown or non-positive."""
+    if not estimated_rows or estimated_rows <= 0:
+        return maximum_batch_size
+    scaled = int(estimated_rows * ADAPTIVE_BATCH_FACTOR)
+    return min(maximum_batch_size, max(ADAPTIVE_BATCH_FLOOR, scaled))
+
+
 def get_estimated_row_count(
     engine: Engine,
     table: str,
@@ -314,6 +328,187 @@ def create_target_table(src_engine: Engine, tgt_engine: Engine,
     cols = []
     for col in src.columns:
         cols.append(Column(col.name, to_generic_type(col.type), nullable=col.nullable))
+    tgt = Table(tgt_table, tgt_meta, *cols, schema=tgt_schema)
+    tgt_full = _full_table(tgt_schema, tgt_table, tgt_engine.dialect.name)
+    ddl = str(CreateTable(tgt).compile(dialect=tgt_engine.dialect)).strip()
+    _log_sql(elog, exec_table_id, "create_table",
+             f"CREATE TABLE {tgt_full}", ddl, target=tgt_full)
+    tgt_meta.create_all(tgt_engine)
+
+
+# Rows sampled from a CSV/TSV/Avro file to infer column types (and size
+# VARCHAR widths) when auto-creating a target table from a filesystem source,
+# which has no source DB table to reflect. Bounded rather than a full-file
+# scan to keep table creation fast; a column whose widest value only appears
+# after this many rows infers a narrower VARCHAR than ideal, but the x2
+# headroom below covers most of that gap.
+_FILE_SCHEMA_SAMPLE_ROWS = 5000
+_VARCHAR_INFER_FLOOR = 64
+_VARCHAR_INFER_CAP = 8000  # matches to_generic_type's own VARCHAR -> TEXT cutoff
+
+
+def _pa_type_to_sa(pa_type) -> sa.types.TypeEngine:
+    """Map a pyarrow type to a SQLAlchemy type (Parquet carries an exact schema)."""
+    import pyarrow as pa
+    if pa.types.is_boolean(pa_type):
+        return Boolean()
+    if pa.types.is_integer(pa_type):
+        if pa.types.is_int64(pa_type) or pa.types.is_uint32(pa_type) or pa.types.is_uint64(pa_type):
+            return BigInteger()
+        return Integer()
+    if pa.types.is_floating(pa_type):
+        return Double()
+    if pa.types.is_decimal(pa_type):
+        return Numeric(precision=pa_type.precision, scale=pa_type.scale)
+    if pa.types.is_timestamp(pa_type):
+        return DateTime()
+    if pa.types.is_date(pa_type):
+        return Date()
+    return Text()
+
+
+def _infer_sa_type_from_values(values: list) -> sa.types.TypeEngine:
+    """Infer a SQLAlchemy type from already-typed Python values (Avro records)."""
+    import datetime as _dt
+    from decimal import Decimal
+    v = next((x for x in values if x is not None), None)
+    if isinstance(v, bool):
+        return Boolean()
+    if isinstance(v, int):
+        return BigInteger()
+    if isinstance(v, float):
+        return Double()
+    if isinstance(v, Decimal):
+        return Numeric()
+    if isinstance(v, _dt.datetime):
+        return DateTime()
+    if isinstance(v, _dt.date):
+        return Date()
+    return Text()
+
+
+def _infer_sa_type_from_strings(values: list) -> sa.types.TypeEngine:
+    """Pick the most specific SQLAlchemy type that fits every non-empty sample
+    value (strings read from a CSV/TSV). Empty strings are treated as NULL and
+    ignored; a column with no non-empty sample falls back to Text."""
+    import datetime as _dt
+    sample = [v.strip() for v in values if v is not None and v.strip() != ""]
+    if not sample:
+        return Text()
+
+    def _digits_only(s: str) -> bool:
+        body = s[1:] if s and s[0] in "+-" else s
+        return body.isdigit()
+
+    def _is_int(s: str) -> bool:
+        body = s[1:] if s and s[0] in "+-" else s
+        # Reject leading-zero forms ("007"): usually identifiers whose zeros
+        # are significant, so keep them as Text instead of silently coercing
+        # to an integer.
+        return body.isdigit() and not (len(body) > 1 and body[0] == "0")
+
+    if all(_is_int(s) for s in sample):
+        return BigInteger()
+
+    # Integer-shaped but not clean ints (e.g. leading-zero "007"): keep as
+    # Text — float("007") == 7.0 would otherwise slip these past the check
+    # below and lose their significant zeros.
+    if all(_digits_only(s) for s in sample):
+        return Text()
+
+    def _is_float(s: str) -> bool:
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+
+    if all(_is_float(s) for s in sample):
+        return Double()
+
+    if {s.lower() for s in sample} <= {"true", "false", "t", "f"}:
+        return Boolean()
+
+    def _all_parse(fn) -> bool:
+        try:
+            for s in sample:
+                fn(s)
+            return True
+        except ValueError:
+            return False
+
+    if _all_parse(_dt.date.fromisoformat):
+        return Date()
+    if _all_parse(_dt.datetime.fromisoformat):
+        return DateTime()
+
+    # Text: size the VARCHAR to the sampled data (with headroom) rather than
+    # a blanket maximum.
+    observed_max = max(len(s) for s in sample)
+    if observed_max > _VARCHAR_INFER_CAP:
+        return Text()
+    length = min(_VARCHAR_INFER_CAP, max(_VARCHAR_INFER_FLOOR, observed_max * 2))
+    return String(length)
+
+
+@_sanitize_exc
+def create_target_table_from_file(tgt_engine: Engine, src_dir: str, src_table: str,
+                                  tgt_table: str, tgt_schema: Optional[str],
+                                  src_fmt: str, csv_delimiter: str = ",",
+                                  elog=None, exec_table_id=None):
+    """Auto-create a DB target table for a filesystem source.
+
+    A filesystem source has no SQLAlchemy engine to reflect (create_target_table
+    would crash on ``None.dialect``), so the column set is derived from the file
+    itself: the native schema for Parquet/Avro, and sampled type inference for
+    CSV/TSV (see _infer_sa_type_from_strings).
+    """
+    cols: list[Column] = []
+    if src_fmt in ("csv", "tsv"):
+        path = _csv_path(src_dir, src_table, src_fmt)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"{src_fmt.upper()} file not found: {path}")
+        with open(path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f, delimiter=_decode_csv_delimiter(csv_delimiter))
+            names = list(reader.fieldnames or [])
+            samples: dict[str, list] = {c: [] for c in names}
+            for i, row in enumerate(reader):
+                if i >= _FILE_SCHEMA_SAMPLE_ROWS:
+                    break
+                for c in names:
+                    samples[c].append(row.get(c))
+        for c in names:
+            cols.append(Column(c, _infer_sa_type_from_strings(samples[c]), nullable=True))
+    elif src_fmt == "avro":
+        import fastavro
+        path = _avro_path(src_dir, src_table)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Avro file not found: {path}")
+        with open(path, "rb") as f:
+            reader = fastavro.reader(f)
+            names = [fld["name"] for fld in reader.writer_schema.get("fields", [])]
+            sample_rows = []
+            for i, rec in enumerate(reader):
+                if i >= _FILE_SCHEMA_SAMPLE_ROWS:
+                    break
+                sample_rows.append(rec)
+        if not names and sample_rows:
+            names = list(sample_rows[0].keys())
+        for c in names:
+            cols.append(Column(c, _infer_sa_type_from_values([r.get(c) for r in sample_rows]),
+                               nullable=True))
+    else:  # parquet
+        import pyarrow.parquet as pq
+        path = _parquet_path(src_dir, src_table)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Parquet file not found: {path}")
+        for field in pq.ParquetFile(path).schema_arrow:
+            cols.append(Column(field.name, _pa_type_to_sa(field.type), nullable=True))
+
+    if not cols:
+        raise ValueError(f"Could not infer any columns from file source for {src_table!r}")
+
+    tgt_meta = MetaData()
     tgt = Table(tgt_table, tgt_meta, *cols, schema=tgt_schema)
     tgt_full = _full_table(tgt_schema, tgt_table, tgt_engine.dialect.name)
     ddl = str(CreateTable(tgt).compile(dialect=tgt_engine.dialect)).strip()
@@ -662,6 +857,7 @@ def migrate_csv_to_db(
     batch_size: int,
     progress_cb: Optional[Callable[[int], None]] = None,
     csv_delimiter: str = ",",
+    csv_null_value: str = "",
     elog=None,
     exec_table_id=None,
     ext: str = "csv",
@@ -686,7 +882,10 @@ def migrate_csv_to_db(
         cols = list(reader.fieldnames or [])
         batch: list[dict] = []
         for row in reader:
-            batch.append(dict(row))
+            row = dict(row)
+            if csv_null_value:
+                row = {k: (None if v == csv_null_value else v) for k, v in row.items()}
+            batch.append(row)
             if len(batch) >= batch_size:
                 _insert_batch(tgt_engine, tgt_schema, tgt_table, cols, batch)
                 total += len(batch)
@@ -714,6 +913,7 @@ def migrate_db_to_csv(
     batch_size: int = 1000,
     csv_quoting: str = "none",
     csv_delimiter: str = ",",
+    csv_null_value: str = "",
     include_header: bool = True,
     elog=None,
     exec_table_id=None,
@@ -742,7 +942,7 @@ def migrate_db_to_csv(
             if not append_mode and include_header:
                 writer.writeheader()
             for row in result:
-                writer.writerow({k: v.isoformat() if hasattr(v, 'isoformat') else ("" if v is None else v) for k, v in zip(cols, row)})
+                writer.writerow({k: v.isoformat() if hasattr(v, 'isoformat') else (csv_null_value if v is None else v) for k, v in zip(cols, row)})
                 total += 1
                 if progress_cb and total % batch_size == 0:
                     progress_cb(total)

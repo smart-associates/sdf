@@ -156,7 +156,8 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
     warnings = []
     valid = True
 
-    tables = [o.entry for o in _resolve_job_tables(job)]
+    resolved = _resolve_job_tables(job)
+    tables = [o.entry for o in resolved]
     if not tables:
         warnings.append("No source tables defined")
 
@@ -172,13 +173,17 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
                 check_fn = avro_table_exists
             else:
                 check_fn = parquet_table_exists
-            for entry in tables:
-                table = entry.split(".", 1)[1] if "." in entry else entry
-                exists = check_fn(src.database or "", table)
+            for obj in resolved:
+                # Files are named by a single "<schema>.<table>" stem (e.g.
+                # title.ratings.tsv), so fold schema back in rather than
+                # splitting obj.entry — a dotted filename with no schema would
+                # otherwise be mis-split into a fake schema/table pair.
+                file_stem = f"{obj.schema}.{obj.name}" if obj.schema else obj.name
+                exists = check_fn(src.database or "", file_stem)
                 _items.append(JobValidationItem(
-                    table_name=entry,
+                    table_name=obj.entry,
                     exists=exists,
-                    message=f"{fmt.upper()} file found" if exists else f"{fmt.upper()} file not found: {table}.{fmt}"
+                    message=f"{fmt.upper()} file found" if exists else f"{fmt.upper()} file not found: {file_stem}.{fmt}"
                 ))
                 if not exists:
                     _valid = False
@@ -186,14 +191,10 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
             src_pw = decrypt(src.password or "")
             src_engine = build_engine(src.db_type, src.host, src.port, src.database, src.username, src_pw)
             try:
-                for entry in tables:
-                    if "." in entry:
-                        schema, table = entry.split(".", 1)
-                    else:
-                        schema, table = None, entry
-                    exists = table_exists(src_engine, table, schema)
+                for obj in resolved:
+                    exists = table_exists(src_engine, obj.name, obj.schema)
                     _items.append(JobValidationItem(
-                        table_name=entry,
+                        table_name=obj.entry,
                         exists=exists,
                         message="Table found" if exists else "Table not found on source"
                     ))
@@ -231,9 +232,15 @@ async def validate_job(job_id: int, db: AsyncSession = Depends(get_db)):
                 tgt_pw = decrypt(tgt.password or "")
                 tgt_engine = build_engine(tgt.db_type, tgt.host, tgt.port, tgt.database, tgt.username, tgt_pw)
                 try:
-                    for item in items:
-                        entry = item.table_name
-                        table = entry.split(".", 1)[1] if "." in entry else entry
+                    # Target table name always mirrors the source object's own
+                    # name (job_runner's tgt_table == src_table convention) —
+                    # not a split of the display entry, which would mangle a
+                    # dotted filesystem stem into a fake schema/table pair.
+                    # zip(resolved, items) also preserves the existing
+                    # skip-if-source-validation-failed behavior (items is []
+                    # in that case).
+                    for obj, _item in zip(resolved, items):
+                        table = obj.name
                         tgt_schema = job.target_schema
                         if not table_exists(tgt_engine, table, tgt_schema):
                             _warnings.append(f"Target table '{table}' does not exist (enable 'create target table' to auto-create)")

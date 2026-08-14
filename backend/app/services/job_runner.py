@@ -15,12 +15,12 @@ from app.models.setting import Setting
 from app.services.encryption import decrypt
 from app.services.job_objects import resolve_job_objects
 from app.services.migration_engine import (
-    build_engine, create_target_table, migrate_table, table_exists,
+    build_engine, create_target_table, create_target_table_from_file, migrate_table, table_exists,
     csv_table_exists, migrate_csv_to_db, migrate_db_to_csv, migrate_csv_to_csv,
     parquet_table_exists, migrate_parquet_to_db, migrate_db_to_parquet, migrate_parquet_to_parquet,
     avro_table_exists, migrate_avro_to_db, migrate_db_to_avro, migrate_avro_to_avro,
     get_estimated_row_count, get_csv_estimated_row_count, get_parquet_estimated_row_count,
-    get_avro_estimated_row_count,
+    get_avro_estimated_row_count, adaptive_batch_size,
 )
 
 logger = logging.getLogger(__name__)
@@ -203,9 +203,10 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         src = data["src"]
         tgt = data["tgt"]
 
-        batch_size = int(_get_setting_sync("batch_size", "1000"))
+        max_batch_size = int(_get_setting_sync("maximum_batch_size", "100000"))
         csv_quoting = _get_setting_sync("csv_quoting", "none").strip() or "none"
         csv_delimiter = _get_setting_sync("csv_delimiter", ",").strip() or ","
+        csv_null_value = _get_setting_sync("csv_null_value", "")
         csv_header = _get_setting_sync("csv_header", "true").strip() not in ("0", "false", "False")
 
         def _delim_for(fmt: str) -> str:
@@ -238,8 +239,8 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         migration_mode = job.get("migration_mode") or "append"
         tgt_schema = job.get("target_schema") or None
 
-        elog.detail("settings_loaded", f"Settings: batch_size={batch_size}, mode={migration_mode}",
-                    batch_size=batch_size, migration_mode=migration_mode)
+        elog.detail("settings_loaded", f"Settings: maximum_batch_size={max_batch_size}, mode={migration_mode}",
+                    max_batch_size=max_batch_size, migration_mode=migration_mode)
         elog.info("job_started", f"Job '{job.get('name', '')}' started ({len(tables)} table{'s' if len(tables) != 1 else ''})",
                   table_count=len(tables))
 
@@ -253,25 +254,27 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 break
             table_entry = obj.entry
             table_filter = obj.table_filter   # per-object WHERE clause, or None
-            # Parse schema.table or just table
-            if "." in table_entry:
-                src_schema, src_table = table_entry.split(".", 1)
-            else:
-                src_schema = None
-                src_table = table_entry
+            src_schema = obj.schema
+            src_table = obj.name
 
             tgt_table = src_table  # same table name on target
+
+            # Filesystem paths use a single "<schema>.<table>" stem (files are
+            # named e.g. "title.ratings.tsv"); DB addressing keeps schema and
+            # table separate. Since tgt_table == src_table, this one stem names
+            # both the source and the target file for any filesystem leg.
+            file_stem = f"{src_schema}.{src_table}" if src_schema else src_table
 
             # Gather estimated row count from source statistics (best-effort)
             try:
                 if src_is_file:
                     src_fmt = src.get("staging_format") or "parquet"
                     if src_fmt in ("csv", "tsv"):
-                        estimated = get_csv_estimated_row_count(src_dir, src_table, ext=src_fmt)
+                        estimated = get_csv_estimated_row_count(src_dir, file_stem, ext=src_fmt)
                     elif src_fmt == "avro":
-                        estimated = get_avro_estimated_row_count(src_dir, src_table)
+                        estimated = get_avro_estimated_row_count(src_dir, file_stem)
                     else:
-                        estimated = get_parquet_estimated_row_count(src_dir, src_table)
+                        estimated = get_parquet_estimated_row_count(src_dir, file_stem)
                 else:
                     estimated = get_estimated_row_count(src_engine, src_table, src_schema)
             except Exception:
@@ -286,12 +289,30 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 elog.detail("row_estimate", f"{table_entry}: ~{estimated:,} estimated rows",
                             exec_table_id=exec_table_id, estimated=estimated)
 
+            # Scale the batch size to the table's estimated row count (~1% of
+            # rows, floored at 1,000, capped at maximum_batch_size), falling
+            # back to the ceiling when no estimate is available.
+            batch_size = adaptive_batch_size(estimated, max_batch_size)
+            elog.detail("adaptive_batch",
+                        f"{table_entry}: batch_size={batch_size:,} (max {max_batch_size:,})",
+                        exec_table_id=exec_table_id, batch_size=batch_size,
+                        max_batch_size=max_batch_size)
+
             try:
                 # Auto-create target table only applies to DB targets
                 if create_tgt and not tgt_is_file:
                     if not table_exists(tgt_engine, tgt_table, tgt_schema):
-                        create_target_table(src_engine, tgt_engine, src_table, tgt_table, src_schema, tgt_schema,
-                                            elog=elog, exec_table_id=exec_table_id)
+                        if src_is_file:
+                            # Filesystem sources have no DB table to reflect;
+                            # derive the target's columns from the file itself.
+                            src_fmt = src.get("staging_format") or "parquet"
+                            create_target_table_from_file(
+                                tgt_engine, src_dir, file_stem, tgt_table, tgt_schema,
+                                src_fmt, csv_delimiter=_delim_for(src_fmt),
+                                elog=elog, exec_table_id=exec_table_id)
+                        else:
+                            create_target_table(src_engine, tgt_engine, src_table, tgt_table, src_schema, tgt_schema,
+                                                elog=elog, exec_table_id=exec_table_id)
                         elog.info("table_created", f"{table_entry}: target table created",
                                   exec_table_id=exec_table_id)
 
@@ -310,34 +331,35 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                     src_fmt = src.get("staging_format") or "parquet"
                     tgt_fmt = tgt.get("staging_format") or "parquet"
                     if src_fmt == tgt_fmt and src_fmt in ("csv", "tsv"):
-                        count = migrate_csv_to_csv(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb, csv_quoting=csv_quoting, csv_delimiter=_delim_for(src_fmt), include_header=csv_header, ext=src_fmt)
+                        count = migrate_csv_to_csv(src_dir, tgt_dir, file_stem, file_stem, migration_mode, progress_cb, csv_quoting=csv_quoting, csv_delimiter=_delim_for(src_fmt), include_header=csv_header, ext=src_fmt)
                     elif src_fmt == "parquet" and tgt_fmt == "parquet":
-                        count = migrate_parquet_to_parquet(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
+                        count = migrate_parquet_to_parquet(src_dir, tgt_dir, file_stem, file_stem, migration_mode, progress_cb)
                     elif src_fmt == "avro" and tgt_fmt == "avro":
-                        count = migrate_avro_to_avro(src_dir, tgt_dir, src_table, tgt_table, migration_mode, progress_cb)
+                        count = migrate_avro_to_avro(src_dir, tgt_dir, file_stem, file_stem, migration_mode, progress_cb)
                     else:
                         raise ValueError(f"Cross-format filesystem copies ('{src_fmt}' → '{tgt_fmt}') are not supported")
                 elif src_type == "filesystem":
                     src_fmt = src.get("staging_format") or "parquet"
                     if src_fmt in ("csv", "tsv"):
-                        count = migrate_csv_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb,
-                                                  csv_delimiter=_delim_for(src_fmt), elog=elog, exec_table_id=exec_table_id, ext=src_fmt)
+                        count = migrate_csv_to_db(src_dir, tgt_engine, file_stem, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb,
+                                                  csv_delimiter=_delim_for(src_fmt), csv_null_value=csv_null_value,
+                                                  elog=elog, exec_table_id=exec_table_id, ext=src_fmt)
                     elif src_fmt == "avro":
-                        count = migrate_avro_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb,
+                        count = migrate_avro_to_db(src_dir, tgt_engine, file_stem, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb,
                                                    elog=elog, exec_table_id=exec_table_id)
                     else:
-                        count = migrate_parquet_to_db(src_dir, tgt_engine, src_table, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb,
+                        count = migrate_parquet_to_db(src_dir, tgt_engine, file_stem, tgt_table, tgt_schema, migration_mode, batch_size, progress_cb,
                                                       elog=elog, exec_table_id=exec_table_id)
                 elif tgt_type == "filesystem":
                     tgt_fmt = tgt.get("staging_format") or "parquet"
                     if tgt_fmt in ("csv", "tsv"):
-                        count = migrate_db_to_csv(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb, batch_size, csv_quoting=csv_quoting, csv_delimiter=_delim_for(tgt_fmt), include_header=csv_header,
+                        count = migrate_db_to_csv(src_engine, tgt_dir, src_table, file_stem, src_schema, table_filter, migration_mode, progress_cb, batch_size, csv_quoting=csv_quoting, csv_delimiter=_delim_for(tgt_fmt), csv_null_value=csv_null_value, include_header=csv_header,
                                                   elog=elog, exec_table_id=exec_table_id, ext=tgt_fmt)
                     elif tgt_fmt == "avro":
-                        count = migrate_db_to_avro(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb,
+                        count = migrate_db_to_avro(src_engine, tgt_dir, src_table, file_stem, src_schema, table_filter, migration_mode, progress_cb,
                                                    elog=elog, exec_table_id=exec_table_id)
                     else:
-                        count = migrate_db_to_parquet(src_engine, tgt_dir, src_table, tgt_table, src_schema, table_filter, migration_mode, progress_cb,
+                        count = migrate_db_to_parquet(src_engine, tgt_dir, src_table, file_stem, src_schema, table_filter, migration_mode, progress_cb,
                                                       elog=elog, exec_table_id=exec_table_id)
                 else:
                     count = migrate_table(
