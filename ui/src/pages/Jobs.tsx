@@ -1,4 +1,4 @@
-import { Fragment, useState, useMemo } from 'react'
+import { Fragment, useEffect, useRef, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Edit2, Play, CheckCircle, Square, Copy } from 'lucide-react'
 import { getJobs, createJob, updateJob, deleteJob, validateJob, executeJob, cloneJob, Job } from '../api/jobs'
@@ -24,9 +24,16 @@ export default function Jobs() {
   const qc = useQueryClient()
   const [modal, setModal] = useState<'create' | 'edit' | 'execution' | null>(null)
   const [form, setForm] = useState<Partial<Job>>(empty())
+  const [isDirty, setIsDirty] = useState(false)
+  const skipDirtyRef = useRef(true)
   const [error, setError] = useState('')
   const [validation, setValidation] = useState<any>(null)
   const [executionId, setExecutionId] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (skipDirtyRef.current) { skipDirtyRef.current = false; return }
+    setIsDirty(true)
+  }, [form])
 
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ['jobs'],
@@ -52,13 +59,13 @@ export default function Jobs() {
 
   const createMut = useMutation({
     mutationFn: (d: Omit<Job, 'id'>) => createJob(d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); setForm(empty()); setError(''); setModal(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); skipDirtyRef.current = true; setIsDirty(false); setForm(empty()); setError(''); setModal(null) },
     onError: (e: any) => setError(e.response?.data?.detail || 'Error'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Job> }) => updateJob(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); setForm(empty()); setError(''); setModal(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); skipDirtyRef.current = true; setIsDirty(false); setForm(empty()); setError(''); setModal(null) },
     onError: (e: any) => setError(e.response?.data?.detail || 'Error'),
   })
 
@@ -100,8 +107,8 @@ export default function Jobs() {
     onError: (e: any) => alert(e.response?.data?.detail || 'Clone failed'),
   })
 
-  const openCreate = () => { setForm(empty()); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('create') }
-  const openEdit = (j: Job) => { setForm({ ...j }); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('edit') }
+  const openCreate = () => { skipDirtyRef.current = true; setIsDirty(false); setForm(empty()); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('create') }
+  const openEdit = (j: Job) => { skipDirtyRef.current = true; setIsDirty(false); setForm({ ...j }); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('edit') }
 
   const handleSubmit = () => {
     // Drop blank rows and renumber positions to the current visual order.
@@ -216,7 +223,12 @@ export default function Jobs() {
             <div className="flex gap-2 justify-between">
               <div className="flex gap-2">
                 {form.id && (
-                  <button onClick={() => validateMut.mutate(form.id!)} disabled={validateMut.isPending} className="flex items-center gap-1 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50">
+                  <button
+                    onClick={() => validateMut.mutate(form.id!)}
+                    disabled={validateMut.isPending || isDirty}
+                    title={isDirty ? 'Save your changes before validating' : undefined}
+                    className="flex items-center gap-1 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                  >
                     <CheckCircle size={14} /> Validate
                   </button>
                 )}
