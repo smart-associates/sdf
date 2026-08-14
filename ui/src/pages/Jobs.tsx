@@ -1,8 +1,12 @@
 import { Fragment, useEffect, useRef, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Edit2, Play, CheckCircle, Square, Copy } from 'lucide-react'
-import { getJobs, createJob, updateJob, deleteJob, validateJob, executeJob, cloneJob, Job } from '../api/jobs'
+import { Plus, Trash2, Edit2, Play, CheckCircle, Square, Copy, Download, Upload } from 'lucide-react'
+import {
+  getJobs, createJob, updateJob, deleteJob, validateJob, executeJob, cloneJob, Job,
+  exportJob, exportAllJobs, importJobs, JobExportDocument, JobImportResult,
+} from '../api/jobs'
 import { errorMessage } from '../api/client'
+import { downloadJson } from '../lib/download'
 import { getConnections } from '../api/connections'
 import { getExecution, stopExecution } from '../api/executions'
 import StatusBadge from '../components/StatusBadge'
@@ -24,13 +28,17 @@ function empty(): Partial<Job> {
 
 export default function Jobs() {
   const qc = useQueryClient()
-  const [modal, setModal] = useState<'create' | 'edit' | 'execution' | null>(null)
+  const [modal, setModal] = useState<'create' | 'edit' | 'execution' | 'import' | null>(null)
   const [form, setForm] = useState<Partial<Job>>(empty())
   const [isDirty, setIsDirty] = useState(false)
   const skipDirtyRef = useRef(true)
   const [error, setError] = useState('')
   const [validation, setValidation] = useState<any>(null)
   const [executionId, setExecutionId] = useState<number | null>(null)
+  const [importText, setImportText] = useState('')
+  const [importError, setImportError] = useState('')
+  const [importResult, setImportResult] = useState<JobImportResult | null>(null)
+  const importFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (skipDirtyRef.current) { skipDirtyRef.current = false; return }
@@ -125,8 +133,60 @@ export default function Jobs() {
     onError: (e: any) => alert(errorMessage(e, 'Clone failed')),
   })
 
+  const exportJobMut = useMutation({
+    mutationFn: exportJob,
+    onSuccess: (doc, id) => {
+      const name = jobs.find(j => j.id === id)?.name || `job-${id}`
+      downloadJson(`${name.replace(/[^a-z0-9_-]+/gi, '_')}-export.json`, doc)
+    },
+    onError: (e: any) => alert(errorMessage(e, 'Export failed')),
+  })
+
+  const exportAllMut = useMutation({
+    mutationFn: exportAllJobs,
+    onSuccess: (doc) => downloadJson('jobs-export.json', doc),
+    onError: (e: any) => alert(errorMessage(e, 'Export failed')),
+  })
+
+  const importMut = useMutation({
+    mutationFn: (doc: JobExportDocument) => importJobs(doc),
+    onSuccess: (result) => {
+      setImportResult(result)
+      setImportError('')
+      qc.invalidateQueries({ queryKey: ['jobs'] })
+    },
+    onError: (e: any) => { setImportError(errorMessage(e, 'Import failed')); setImportResult(null) },
+  })
+
   const openCreate = () => { skipDirtyRef.current = true; setIsDirty(false); setForm(empty()); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('create') }
   const openEdit = (j: Job) => { skipDirtyRef.current = true; setIsDirty(false); setForm({ ...j }); setError(''); setValidation(null); createMut.reset(); updateMut.reset(); setModal('edit') }
+  const openImport = () => { setImportText(''); setImportError(''); setImportResult(null); importMut.reset(); setModal('import') }
+
+  const submitImport = (text: string) => {
+    setImportError('')
+    setImportResult(null)
+    let doc: JobExportDocument
+    try {
+      doc = JSON.parse(text)
+    } catch {
+      setImportError('Could not parse this as JSON')
+      return
+    }
+    importMut.mutate(doc)
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file
+    if (!file) return
+    try {
+      const text = await file.text()
+      setImportText(text)
+      submitImport(text)
+    } catch {
+      setImportError('Could not read the selected file')
+    }
+  }
 
   const handleSubmit = () => {
     // Drop blank rows and renumber positions to the current visual order.
@@ -159,9 +219,28 @@ export default function Jobs() {
           <h1 className="text-2xl font-bold">Jobs</h1>
           <p className="text-gray-500 text-sm mt-1">Configure and run migration jobs</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-          <Plus size={16} /> New Job
-        </button>
+        <div className="flex items-center gap-2">
+          {jobs.length > 0 && (
+            <button
+              onClick={() => exportAllMut.mutate()}
+              disabled={exportAllMut.isPending}
+              title="Export every job's configuration as a portable JSON file (no credentials)"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            >
+              <Download size={14} /> {exportAllMut.isPending ? 'Exporting…' : 'Export all'}
+            </button>
+          )}
+          <button
+            onClick={openImport}
+            title="Import job configuration from a previously exported JSON file"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"
+          >
+            <Upload size={14} /> Import
+          </button>
+          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+            <Plus size={16} /> New Job
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border">
@@ -215,6 +294,7 @@ export default function Jobs() {
                           : { label: executeMut.isPending && executeMut.variables === j.id ? 'Executing…' : 'Execute', icon: <Play size={14} />, onClick: () => executeMut.mutate(j.id), disabled: executeMut.isPending && executeMut.variables === j.id },
                         { label: 'Edit', icon: <Edit2 size={14} />, onClick: () => openEdit(j) },
                         { label: 'Clone', icon: <Copy size={14} />, onClick: () => cloneMut.mutate(j.id) },
+                        { label: 'Export', icon: <Download size={14} />, onClick: () => exportJobMut.mutate(j.id) },
                         { label: 'Delete', icon: <Trash2 size={14} />, onClick: () => deleteMut.mutate(j.id), danger: true, confirm: 'Delete job?' },
                       ]}
                     />
@@ -323,6 +403,70 @@ export default function Jobs() {
                 <label htmlFor="create_target_table" className="text-sm">Auto-create target tables from source schema</label>
               </div>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {modal === 'import' && (
+        <Modal title="Import Pipeline Configuration" onClose={() => setModal(null)} size="lg">
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500">
+              Import a job configuration document exported from this or another SDF instance.
+              Connections are matched by name — jobs are created or, if a job with the same
+              name already exists here, updated in place.
+            </p>
+            <input
+              ref={importFileRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={handleImportFile}
+            />
+            <textarea
+              value={importText}
+              onChange={e => { setImportText(e.target.value); setImportError(''); setImportResult(null) }}
+              placeholder="Paste an exported jobs JSON document here — or use Upload file below…"
+              rows={6}
+              className="w-full border rounded-lg px-3 py-2 text-xs font-mono"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => submitImport(importText)}
+                disabled={!importText.trim() || importMut.isPending}
+                className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {importMut.isPending ? 'Importing…' : 'Import'}
+              </button>
+              <button
+                onClick={() => importFileRef.current?.click()}
+                disabled={importMut.isPending}
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                <Upload size={13} /> Upload file
+              </button>
+            </div>
+
+            {importError && (
+              <div className="p-2 bg-red-50 text-red-600 text-sm rounded">{importError}</div>
+            )}
+
+            {importResult && (
+              <div className="p-3 text-sm rounded border bg-green-50 border-green-200 space-y-2">
+                <p className="font-medium text-green-700">
+                  {importResult.created.length} created, {importResult.updated.length} updated
+                  {importResult.failed.length > 0 && `, ${importResult.failed.length} failed`}
+                </p>
+                {importResult.created.length > 0 && (
+                  <p className="text-xs text-gray-600">Created: {importResult.created.join(', ')}</p>
+                )}
+                {importResult.updated.length > 0 && (
+                  <p className="text-xs text-gray-600">Updated: {importResult.updated.join(', ')}</p>
+                )}
+                {importResult.failed.map((f, i) => (
+                  <div key={i} className="text-xs text-red-600">✗ {f.name}: {f.error}</div>
+                ))}
+              </div>
+            )}
           </div>
         </Modal>
       )}

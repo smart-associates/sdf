@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, Field, validator
 from typing import List, Literal, Optional
 from datetime import datetime
 
@@ -41,6 +41,49 @@ class JobCreate(JobBase):
 
 class JobUpdate(JobBase):
     pass
+
+
+class ConnectionRef(BaseModel):
+    """A connection referenced by name/type only — never credentials, and
+    never any other connection metadata either, since a connection is its own
+    portable export/import document. Resolved against the target instance's
+    connections by (name, db_type); never auto-created.
+    """
+    name: str
+    db_type: str
+
+
+class JobExportItem(JobBase):
+    """A job's config as a portable document — connection IDs replaced by
+    name/type references.
+
+    The two *_connection_id ints are inherited from JobBase but given a
+    default and marked exclude=True: they're meaningless on another instance,
+    must not appear in the serialized document, and — since this model is
+    also used to *parse* an imported document — must not be required on the
+    way in either (the exported JSON never contains them).
+    """
+    source_connection_id: Optional[int] = Field(default=None, exclude=True)
+    target_connection_id: Optional[int] = Field(default=None, exclude=True)
+    source_connection: Optional[ConnectionRef] = None
+    target_connection: Optional[ConnectionRef] = None
+
+
+class JobExportDocument(BaseModel):
+    format_version: int = 1
+    exported_at: datetime
+    jobs: List[JobExportItem]
+
+
+class JobImportFailure(BaseModel):
+    name: str
+    error: str
+
+
+class JobImportResult(BaseModel):
+    created: List[str] = []
+    updated: List[str] = []
+    failed: List[JobImportFailure] = []
 
 class JobResponse(JobBase):
     id: int

@@ -1,4 +1,4 @@
-import { Copy, Edit2, Plug, Trash2 } from 'lucide-react'
+import { Copy, Download, Edit2, Plug, Trash2 } from 'lucide-react'
 import { DatabaseConnection } from '../api/connections'
 import StatusBadge from './StatusBadge'
 import VendorIcon, { VENDOR_LABEL } from './VendorIcon'
@@ -9,11 +9,12 @@ interface Props {
   onEdit: () => void
   onTest: () => void
   onClone: () => void
+  onExport: () => void
   onDelete: () => void
   testing?: boolean
 }
 
-export default function ConnectionCard({ connection: c, onEdit, onTest, onClone, onDelete, testing }: Props) {
+export default function ConnectionCard({ connection: c, onEdit, onTest, onClone, onExport, onDelete, testing }: Props) {
   const isFs = c.db_type === 'filesystem'
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -47,6 +48,7 @@ export default function ConnectionCard({ connection: c, onEdit, onTest, onClone,
             { label: testing ? 'Testing…' : 'Test connection', icon: <Plug size={14} />, onClick: onTest, disabled: testing },
             { label: 'Edit', icon: <Edit2 size={14} />, onClick: onEdit },
             { label: 'Clone', icon: <Copy size={14} />, onClick: onClone },
+            { label: 'Export', icon: <Download size={14} />, onClick: onExport },
             { label: 'Delete', icon: <Trash2 size={14} />, onClick: onDelete, danger: true, confirm: 'Delete connection?' },
           ]}
         />

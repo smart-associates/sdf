@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Literal, Optional
+from pydantic import BaseModel, ConfigDict
+from typing import List, Literal, Optional
 from datetime import datetime
 
 class DatabaseConnectionBase(BaseModel):
@@ -35,3 +35,25 @@ class ConnectionTestResponse(BaseModel):
     message: str
     tested_at: str
     error: Optional[str] = None
+
+class ConnectionExportItem(DatabaseConnectionBase):
+    """A connection's config as a portable document.
+
+    DatabaseConnectionBase already excludes id and password — it's exactly
+    the safe-to-export shape, so this is a thin reuse rather than a restatement.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+class ConnectionExportDocument(BaseModel):
+    format_version: int = 1
+    exported_at: datetime
+    connections: List[ConnectionExportItem]
+
+class ConnectionImportFailure(BaseModel):
+    name: str
+    error: str
+
+class ConnectionImportResult(BaseModel):
+    created: List[str] = []
+    updated: List[str] = []
+    failed: List[ConnectionImportFailure] = []

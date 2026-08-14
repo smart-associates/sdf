@@ -69,3 +69,44 @@ export const executeJob = (id: number) =>
 
 export const cloneJob = (id: number) =>
   client.post<Job>(`/jobs/${id}/clone`).then(r => r.data)
+
+export interface ConnectionRef {
+  name: string
+  db_type: string
+}
+
+export interface JobExportItem {
+  name: string
+  tables: JobTableItem[]
+  target_schema?: string | null
+  create_target_table: boolean
+  migration_mode: 'truncate_load' | 'append'
+  source_connection?: ConnectionRef | null
+  target_connection?: ConnectionRef | null
+}
+
+export interface JobExportDocument {
+  format_version: number
+  exported_at: string
+  jobs: JobExportItem[]
+}
+
+export interface JobImportFailure {
+  name: string
+  error: string
+}
+
+export interface JobImportResult {
+  created: string[]
+  updated: string[]
+  failed: JobImportFailure[]
+}
+
+export const exportJob = (id: number) =>
+  client.get<JobExportDocument>(`/jobs/${id}/export`).then(r => r.data)
+
+export const exportAllJobs = () =>
+  client.get<JobExportDocument>('/jobs/export').then(r => r.data)
+
+export const importJobs = (doc: JobExportDocument) =>
+  client.post<JobImportResult>('/jobs/import', doc).then(r => r.data)

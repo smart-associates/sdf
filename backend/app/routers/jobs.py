@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import os
+from datetime import datetime, timezone
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -9,7 +11,10 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.job import Job, JobTable, JobExecution, JobExecutionTable, JobExecutionLog
 from app.models.connection import DatabaseConnection
-from app.schemas.job import JobCreate, JobUpdate, JobResponse, JobValidationResponse, JobValidationItem, JobExecuteResponse
+from app.schemas.job import (
+    JobCreate, JobUpdate, JobResponse, JobValidationResponse, JobValidationItem, JobExecuteResponse,
+    JobTableItem, ConnectionRef, JobExportItem, JobExportDocument, JobImportResult, JobImportFailure,
+)
 from app.services.job_runner import start_job_execution, stop_execution
 from app.services.encryption import decrypt
 from app.services.migration_engine import build_engine, table_exists, csv_table_exists, parquet_table_exists, avro_table_exists
@@ -57,6 +62,73 @@ def _resolve_job_tables(job) -> list:
     return resolve_job_objects(_job_table_rows(job))
 
 
+# ---- export / import --------------------------------------------------------
+
+_JOB_CONNECTION_FIELDS = (
+    ("source_connection_id", "source_connection"),
+    ("target_connection_id", "target_connection"),
+)
+
+
+def _connection_ref(conn: DatabaseConnection) -> ConnectionRef:
+    # name+db_type only — a connection's full metadata is now its own portable
+    # export/import document; a job document just points at it.
+    return ConnectionRef(name=conn.name, db_type=conn.db_type)
+
+
+async def _load_connections(db: AsyncSession, ids: set) -> dict:
+    ids = {i for i in ids if i is not None}
+    if not ids:
+        return {}
+    result = await db.execute(select(DatabaseConnection).where(DatabaseConnection.id.in_(ids)))
+    return {c.id: c for c in result.scalars().all()}
+
+
+async def _export_item(db: AsyncSession, job: Job) -> JobExportItem:
+    conn_map = await _load_connections(db, {job.source_connection_id, job.target_connection_id})
+    payload = {
+        "name": job.name,
+        "target_schema": job.target_schema,
+        "create_target_table": job.create_target_table,
+        "migration_mode": job.migration_mode,
+        "tables": [JobTableItem.model_validate(t) for t in job.tables],
+    }
+    for id_field, ref_field in _JOB_CONNECTION_FIELDS:
+        conn_id = getattr(job, id_field)
+        payload[ref_field] = _connection_ref(conn_map[conn_id]) if conn_id in conn_map else None
+    return JobExportItem(**payload)
+
+
+async def _resolve_connection_ref(db: AsyncSession, ref: Optional[ConnectionRef]):
+    """Resolve a ConnectionRef to a local connection id by (name, db_type).
+
+    Never auto-creates: an unresolved or ambiguous name is reported back to
+    the caller, not guessed at. Returns (id_or_None, problem_or_None).
+    """
+    if ref is None:
+        return None, None
+    result = await db.execute(
+        select(DatabaseConnection).where(
+            DatabaseConnection.name == ref.name,
+            DatabaseConnection.db_type == ref.db_type,
+        )
+    )
+    matches = result.scalars().all()
+    if not matches:
+        return None, f"connection '{ref.name}' ({ref.db_type}) not found"
+    if len(matches) > 1:
+        return None, f"connection '{ref.name}' ({ref.db_type}) is ambiguous ({len(matches)} matches on this instance)"
+    return matches[0].id, None
+
+
+async def _find_job_by_name(db: AsyncSession, name: str):
+    result = await db.execute(select(Job).where(Job.name == name))
+    matches = result.scalars().all()
+    if len(matches) > 1:
+        return None, f"job name '{name}' is ambiguous ({len(matches)} matches on this instance)"
+    return (matches[0] if matches else None), None
+
+
 @router.get("", response_model=list[JobResponse])
 async def list_jobs(db: AsyncSession = Depends(get_db)):
     jobs = (await db.execute(select(Job).order_by(Job.id))).scalars().all()
@@ -71,6 +143,74 @@ async def list_jobs(db: AsyncSession = Depends(get_db)):
         r.running_execution_id = running_map.get(j.id)
         out.append(r)
     return out
+
+
+@router.get("/export", response_model=JobExportDocument)
+async def export_all_jobs(db: AsyncSession = Depends(get_db)):
+    """Registered before GET /{job_id} — otherwise FastAPI would try to parse
+    'export' as a job_id and 404 rather than reaching this handler."""
+    jobs = (await db.execute(select(Job).order_by(Job.id))).scalars().all()
+    items = [await _export_item(db, j) for j in jobs]
+    return JobExportDocument(exported_at=datetime.now(timezone.utc), jobs=items)
+
+
+@router.get("/{job_id}/export", response_model=JobExportDocument)
+async def export_job(job_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(404, "Job not found")
+    item = await _export_item(db, job)
+    return JobExportDocument(exported_at=datetime.now(timezone.utc), jobs=[item])
+
+
+@router.post("/import", response_model=JobImportResult)
+async def import_jobs(doc: JobExportDocument, db: AsyncSession = Depends(get_db)):
+    """Import a job export document.
+
+    Two phases: resolve everything first and fail the whole request if any
+    connection name or job name can't be resolved unambiguously (nothing is
+    written); then apply job-by-job by calling create_job/update_job directly
+    so import gets every validation those endpoints already enforce, for
+    free. Each job commits independently in phase two — a failure there is
+    reported per-job rather than rolling back earlier jobs.
+    """
+    if doc.format_version != 1:
+        raise HTTPException(400, f"Unsupported export format_version {doc.format_version}")
+
+    problems: list = []
+    plan: list = []
+    for item in doc.jobs:
+        resolved = {}
+        for id_field, ref_field in _JOB_CONNECTION_FIELDS:
+            ref = getattr(item, ref_field)
+            conn_id, problem = await _resolve_connection_ref(db, ref)
+            if problem:
+                problems.append(f"job '{item.name}': {problem}")
+            resolved[id_field] = conn_id
+        existing, ambiguous = await _find_job_by_name(db, item.name)
+        if ambiguous:
+            problems.append(ambiguous)
+        plan.append((item, existing, resolved))
+
+    if problems:
+        raise HTTPException(400, "; ".join(problems))
+
+    result = JobImportResult()
+    for item, existing, resolved in plan:
+        payload = item.model_dump(exclude={"source_connection", "target_connection"})
+        payload.update(resolved)
+        try:
+            if existing is None:
+                await create_job(JobCreate(**payload), db)
+                result.created.append(item.name)
+            else:
+                await update_job(existing.id, JobUpdate(**payload), db)
+                result.updated.append(item.name)
+        except HTTPException as e:
+            result.failed.append(JobImportFailure(name=item.name, error=str(e.detail)))
+
+    return result
 
 
 @router.get("/{job_id}", response_model=JobResponse)

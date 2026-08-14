@@ -63,3 +63,39 @@ export const listConnectionObjects = (id: number, schema?: string) =>
 
 export const listConnectionFiles = (id: number) =>
   client.get<{ files: ConnectionFile[] }>(`/connections/${id}/files`).then(r => r.data.files)
+
+export interface ConnectionExportItem {
+  name: string
+  db_type: string
+  host?: string | null
+  port?: number | null
+  database: string
+  username?: string | null
+  staging_format?: string | null
+}
+
+export interface ConnectionExportDocument {
+  format_version: number
+  exported_at: string
+  connections: ConnectionExportItem[]
+}
+
+export interface ConnectionImportFailure {
+  name: string
+  error: string
+}
+
+export interface ConnectionImportResult {
+  created: string[]
+  updated: string[]
+  failed: ConnectionImportFailure[]
+}
+
+export const exportConnection = (id: number) =>
+  client.get<ConnectionExportDocument>(`/connections/${id}/export`).then(r => r.data)
+
+export const exportAllConnections = () =>
+  client.get<ConnectionExportDocument>('/connections/export').then(r => r.data)
+
+export const importConnections = (doc: ConnectionExportDocument) =>
+  client.post<ConnectionImportResult>('/connections/import', doc).then(r => r.data)

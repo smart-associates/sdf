@@ -1,12 +1,17 @@
 import asyncio
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
+from app.models.connection import DatabaseConnection
 from app.schemas.connection import (
     DatabaseConnectionCreate, DatabaseConnectionUpdate,
-    DatabaseConnectionResponse, ConnectionTestResponse
+    DatabaseConnectionResponse, ConnectionTestResponse,
+    ConnectionExportItem, ConnectionExportDocument, ConnectionImportResult, ConnectionImportFailure,
 )
 from app.services import connection_service as svc
 from app.services import connection_introspect
@@ -16,6 +21,66 @@ router = APIRouter(prefix="/api/connections", tags=["connections"])
 @router.get("", response_model=list[DatabaseConnectionResponse])
 async def list_connections(db: AsyncSession = Depends(get_db)):
     return await svc.list_connections(db)
+
+@router.get("/export", response_model=ConnectionExportDocument)
+async def export_all_connections(db: AsyncSession = Depends(get_db)):
+    """Registered before GET /{conn_id} — otherwise FastAPI would try to parse
+    'export' as a conn_id and 404 rather than reaching this handler."""
+    conns = await svc.list_connections(db)
+    items = [ConnectionExportItem.model_validate(c) for c in conns]
+    return ConnectionExportDocument(exported_at=datetime.now(timezone.utc), connections=items)
+
+@router.get("/{conn_id}/export", response_model=ConnectionExportDocument)
+async def export_connection(conn_id: int, db: AsyncSession = Depends(get_db)):
+    conn = await svc.get_connection(db, conn_id)
+    if not conn:
+        raise HTTPException(404, "Connection not found")
+    item = ConnectionExportItem.model_validate(conn)
+    return ConnectionExportDocument(exported_at=datetime.now(timezone.utc), connections=[item])
+
+@router.post("/import", response_model=ConnectionImportResult)
+async def import_connections(doc: ConnectionExportDocument, db: AsyncSession = Depends(get_db)):
+    """Import a connection export document.
+
+    Two phases: resolve everything first (by name — an existing connection
+    with a different db_type is a field to update, not a different identity)
+    and fail the whole request if any name is ambiguous, before writing
+    anything; then apply by calling create_connection/update_connection
+    directly so import gets the same validation as the regular endpoints,
+    for free.
+    """
+    if doc.format_version != 1:
+        raise HTTPException(400, f"Unsupported export format_version {doc.format_version}")
+
+    problems: list = []
+    plan: list = []
+    for item in doc.connections:
+        result = await db.execute(select(DatabaseConnection).where(DatabaseConnection.name == item.name))
+        matches = result.scalars().all()
+        if len(matches) > 1:
+            problems.append(f"connection '{item.name}' is ambiguous ({len(matches)} matches on this instance)")
+            continue
+        plan.append((item, matches[0] if matches else None))
+
+    if problems:
+        raise HTTPException(400, "; ".join(problems))
+
+    result = ConnectionImportResult()
+    for item, existing in plan:
+        try:
+            if existing is None:
+                data = DatabaseConnectionCreate(**item.model_dump())
+                await svc.create_connection(db, data.model_dump())
+                result.created.append(item.name)
+            else:
+                data = DatabaseConnectionUpdate(**item.model_dump())
+                await svc.update_connection(db, existing.id, data.model_dump(exclude_unset=True))
+                result.updated.append(item.name)
+        except (HTTPException, ValidationError) as e:
+            detail = e.detail if isinstance(e, HTTPException) else str(e)
+            result.failed.append(ConnectionImportFailure(name=item.name, error=str(detail)))
+
+    return result
 
 @router.get("/{conn_id}", response_model=DatabaseConnectionResponse)
 async def get_connection(conn_id: int, db: AsyncSession = Depends(get_db)):
