@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sqlalchemy as sa
 from sqlalchemy.engine import URL
@@ -10,12 +11,25 @@ from app.models.connection import DatabaseConnection
 from app.services.encryption import encrypt, decrypt, mask, is_masked, MASKED, DecryptionError
 from app.services.clone_utils import next_copy_name
 
+TEST_TIMEOUT = 15  # seconds — overall safety net for connection tests
+
 DEFAULT_PORTS = {"postgresql": 5432, "mysql": 3306, "mssql": 1433}
 _DRIVERS = {
     "postgresql": "postgresql+psycopg2",
     "mysql": "mysql+pymysql",
     "mssql": "mssql+pymssql",
 }
+
+
+def _connect_timeout_args(db_type: str) -> dict:
+    """Driver-specific connect timeout args (10s) so an unreachable host fails
+    fast instead of hanging on driver defaults (pymssql ~60s, psycopg2 ~120s,
+    pymysql effectively infinite)."""
+    if db_type in ("postgresql", "mysql"):
+        return {"connect_timeout": 10}
+    if db_type == "mssql":
+        return {"login_timeout": 10}
+    return {}
 
 
 def get_jdbc_url(conn: DatabaseConnection, plaintext_password: str) -> str:
@@ -149,6 +163,23 @@ async def delete_connection(db: AsyncSession, conn_id: int) -> bool:
 
 
 async def test_connection(db: AsyncSession, conn_id: int) -> dict:
+    try:
+        return await asyncio.wait_for(_test_connection_inner(db, conn_id), timeout=TEST_TIMEOUT)
+    except asyncio.TimeoutError:
+        result = await db.execute(select(DatabaseConnection).where(DatabaseConnection.id == conn_id))
+        conn = result.scalar_one_or_none()
+        if not conn:
+            raise ValueError("Connection not found")
+        tested_at = datetime.now(timezone.utc).isoformat()
+        error_msg = f"Connection test timed out after {TEST_TIMEOUT}s"
+        conn.last_test_status = "failed"
+        conn.last_tested_at = tested_at
+        conn.last_test_error = error_msg
+        await db.commit()
+        return {"success": False, "message": "Connection failed", "tested_at": tested_at, "error": error_msg}
+
+
+async def _test_connection_inner(db: AsyncSession, conn_id: int) -> dict:
     result = await db.execute(select(DatabaseConnection).where(DatabaseConnection.id == conn_id))
     conn = result.scalar_one_or_none()
     if not conn:
@@ -188,11 +219,15 @@ async def test_connection(db: AsyncSession, conn_id: int) -> dict:
     url = URL.create(_DRIVERS[conn.db_type], username=conn.username,
                      password=plaintext_pw, host=conn.host,
                      port=port, database=conn.database)
-    connect_args = {"connect_timeout": 10} if conn.db_type == "postgresql" else {}
+    connect_args = _connect_timeout_args(conn.db_type)
     engine = sa.create_engine(url, connect_args=connect_args)
-    try:
+
+    def _probe():
         with engine.connect() as c:
             c.execute(sa.text("SELECT 1"))
+
+    try:
+        await asyncio.to_thread(_probe)
         conn.last_test_status = "success"
         conn.last_tested_at = tested_at
         conn.last_test_error = None
