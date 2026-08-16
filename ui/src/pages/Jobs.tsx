@@ -15,6 +15,7 @@ import SortableHeader from '../components/SortableHeader'
 import VendorIcon from '../components/VendorIcon'
 import TableViewPicker from '../components/TableViewPicker'
 import KebabMenu from '../components/KebabMenu'
+import HintIcon from '../components/HintIcon'
 import { useSortableData } from '../hooks/useSortableData'
 
 const MIGRATION_MODES = ['append', 'truncate_load'] as const
@@ -389,7 +390,10 @@ export default function Jobs() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Migration Mode</label>
+                <label className="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+                  Migration Mode
+                  <HintIcon tip={<><code>append</code> adds rows on every run. <code>truncate_load</code> empties each target table first, then loads a fresh copy.</>} />
+                </label>
                 <select className="w-full border rounded-lg px-3 py-2 text-sm" value={form.migration_mode || 'append'} onChange={e => setForm(f => ({ ...f, migration_mode: e.target.value as any }))}>
                   {MIGRATION_MODES.map(m => <option key={m} value={m}>{m.replace('_', ' ')}</option>)}
                 </select>
@@ -400,7 +404,10 @@ export default function Jobs() {
               </div>
               <div className="col-span-2 flex items-center gap-2">
                 <input type="checkbox" id="create_target_table" checked={form.create_target_table || false} onChange={e => setForm(f => ({ ...f, create_target_table: e.target.checked }))} />
-                <label htmlFor="create_target_table" className="text-sm">Auto-create target tables from source schema</label>
+                <label htmlFor="create_target_table" className="text-sm flex items-center gap-1.5">
+                  Auto-create target tables from source schema
+                  <HintIcon tip={<>Only creates a target table when it doesn't already exist — never alters or replaces an existing one.</>} />
+                </label>
               </div>
             </div>
           </div>

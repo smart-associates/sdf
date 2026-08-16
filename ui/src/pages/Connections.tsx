@@ -11,6 +11,7 @@ import { errorMessage } from '../api/client'
 import { downloadJson } from '../lib/download'
 import Modal from '../components/Modal'
 import ConnectionCard from '../components/ConnectionCard'
+import HintIcon from '../components/HintIcon'
 import { VENDOR_LABEL } from '../components/VendorIcon'
 
 const DB_TYPES = ['postgresql', 'mysql', 'mssql', 'filesystem'] as const
@@ -224,11 +225,11 @@ export default function Connections() {
               {form.db_type === 'filesystem' ? (
                 <>
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Directory Path *</label>
+                    <label className="text-xs font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+                      Directory Path *
+                      <HintIcon tip={<>Each table maps to a file: <code>&lt;directory&gt;/&lt;table&gt;.{form.staging_format || 'parquet'}</code></>} />
+                    </label>
                     <input className="w-full border rounded-lg px-3 py-2 text-sm font-mono" placeholder="/data/files" value={form.database || ''} onChange={e => setForm(f => ({ ...f, database: e.target.value }))} />
-                    <p className="text-xs text-gray-400 mt-1">
-                      Each table maps to a file: &lt;directory&gt;/&lt;table&gt;.{form.staging_format || 'parquet'}
-                    </p>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Output Format</label>
