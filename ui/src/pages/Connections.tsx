@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Download, Upload } from 'lucide-react'
+import { Plus, Download, Upload, LayoutGrid, List } from 'lucide-react'
+import clsx from 'clsx'
 import {
   getConnections, createConnection, updateConnection,
   deleteConnection, testConnection, cloneConnection, DatabaseConnection,
@@ -11,8 +12,14 @@ import { errorMessage } from '../api/client'
 import { downloadJson } from '../lib/download'
 import Modal from '../components/Modal'
 import ConnectionCard from '../components/ConnectionCard'
+import ConnectionRow from '../components/ConnectionRow'
 import HintIcon from '../components/HintIcon'
+import SortableHeader from '../components/SortableHeader'
+import { useSortableData } from '../hooks/useSortableData'
 import { VENDOR_LABEL } from '../components/VendorIcon'
+
+type ViewMode = 'card' | 'list'
+const VIEW_MODE_KEY = 'connections:view'
 
 const DB_TYPES = ['postgresql', 'mysql', 'mssql', 'filesystem'] as const
 const DEFAULT_PORTS: Record<string, number> = { postgresql: 5432, mysql: 3306, mssql: 1433 }
@@ -31,10 +38,19 @@ export default function Connections() {
   const [importError, setImportError] = useState('')
   const [importResult, setImportResult] = useState<ConnectionImportResult | null>(null)
   const importFileRef = useRef<HTMLInputElement>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    () => (localStorage.getItem(VIEW_MODE_KEY) === 'list' ? 'list' : 'card')
+  )
+
+  useEffect(() => {
+    localStorage.setItem(VIEW_MODE_KEY, viewMode)
+  }, [viewMode])
 
   const { data: connections = [], isLoading } = useQuery({ queryKey: ['connections'], queryFn: getConnections })
 
-  const sortedConnections = [...connections].sort((a, b) => a.name.localeCompare(b.name))
+  const { sortedData: sortedConnections, sortKey, sortDirection, onSort } = useSortableData<DatabaseConnection, string>(
+    connections, 'name', 'asc'
+  )
 
   const createMut = useMutation({
     mutationFn: (d: Omit<DatabaseConnection, 'id'>) => createConnection(d),
@@ -146,6 +162,32 @@ export default function Connections() {
           <p className="text-gray-500 text-sm mt-1">Manage database connections</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-lg border bg-white p-0.5" role="group" aria-label="View mode">
+            <button
+              type="button"
+              onClick={() => setViewMode('card')}
+              aria-pressed={viewMode === 'card'}
+              title="Card view"
+              className={clsx(
+                'flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition',
+                viewMode === 'card' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              )}
+            >
+              <LayoutGrid size={14} /> Cards
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              aria-pressed={viewMode === 'list'}
+              title="List view"
+              className={clsx(
+                'flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition',
+                viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              )}
+            >
+              <List size={14} /> List
+            </button>
+          </div>
           {connections.length > 0 && (
             <button
               onClick={() => exportAllMut.mutate()}
@@ -173,7 +215,7 @@ export default function Connections() {
         <div className="bg-white rounded-xl p-10 shadow-sm border text-center text-gray-400 text-sm">
           No connections yet — click Add Connection to get started.
         </div>
-      ) : (
+      ) : viewMode === 'card' ? (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {sortedConnections.map(c => (
             <ConnectionCard
@@ -187,6 +229,35 @@ export default function Connections() {
               testing={testMut.isPending && testMut.variables === c.id}
             />
           ))}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <SortableHeader label="Name" sortKey="name" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+                <SortableHeader label="Type" sortKey="db_type" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Location</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Database</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {sortedConnections.map(c => (
+                <ConnectionRow
+                  key={c.id}
+                  connection={c}
+                  onEdit={() => openEdit(c)}
+                  onTest={() => testMut.mutate(c.id)}
+                  onClone={() => cloneMut.mutate(c.id)}
+                  onExport={() => exportConnectionMut.mutate(c.id)}
+                  onDelete={() => deleteMut.mutate(c.id)}
+                  testing={testMut.isPending && testMut.variables === c.id}
+                />
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

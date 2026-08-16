@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Edit2, Play, CheckCircle, Square, Copy, Download, Upload } from 'lucide-react'
+import { Plus, Trash2, Edit2, Play, CheckCircle, Square, Copy, Download, Upload, LayoutGrid, List } from 'lucide-react'
+import clsx from 'clsx'
 import {
   getJobs, createJob, updateJob, deleteJob, validateJob, executeJob, cloneJob, Job,
   exportJob, exportAllJobs, importJobs, JobExportDocument, JobImportResult,
@@ -16,7 +17,11 @@ import VendorIcon from '../components/VendorIcon'
 import TableViewPicker from '../components/TableViewPicker'
 import KebabMenu from '../components/KebabMenu'
 import HintIcon from '../components/HintIcon'
+import JobCard from '../components/JobCard'
 import { useSortableData } from '../hooks/useSortableData'
+
+type ViewMode = 'card' | 'list'
+const VIEW_MODE_KEY = 'jobs:view'
 
 const MIGRATION_MODES = ['append', 'truncate_load'] as const
 
@@ -40,6 +45,13 @@ export default function Jobs() {
   const [importError, setImportError] = useState('')
   const [importResult, setImportResult] = useState<JobImportResult | null>(null)
   const importFileRef = useRef<HTMLInputElement>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    () => (localStorage.getItem(VIEW_MODE_KEY) === 'card' ? 'card' : 'list')
+  )
+
+  useEffect(() => {
+    localStorage.setItem(VIEW_MODE_KEY, viewMode)
+  }, [viewMode])
 
   useEffect(() => {
     if (skipDirtyRef.current) { skipDirtyRef.current = false; return }
@@ -221,6 +233,32 @@ export default function Jobs() {
           <p className="text-gray-500 text-sm mt-1">Configure and run migration jobs</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-lg border bg-white p-0.5" role="group" aria-label="View mode">
+            <button
+              type="button"
+              onClick={() => setViewMode('card')}
+              aria-pressed={viewMode === 'card'}
+              title="Card view"
+              className={clsx(
+                'flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition',
+                viewMode === 'card' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              )}
+            >
+              <LayoutGrid size={14} /> Cards
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              aria-pressed={viewMode === 'list'}
+              title="List view"
+              className={clsx(
+                'flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition',
+                viewMode === 'list' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              )}
+            >
+              <List size={14} /> List
+            </button>
+          </div>
           {jobs.length > 0 && (
             <button
               onClick={() => exportAllMut.mutate()}
@@ -244,71 +282,94 @@ export default function Jobs() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <SortableHeader label="Name" sortKey="name" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
-              <SortableHeader label="Source" sortKey="source" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
-              <SortableHeader label="Target" sortKey="target" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
-              <SortableHeader label="Mode" sortKey="migration_mode" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {sortedJobs.map(j => (
-              <tr key={j.id} onClick={() => openEdit(j)} className="hover:bg-gray-50 cursor-pointer">
-                <td className="px-4 py-3 font-medium">{j.name}</td>
-                <td className="px-4 py-3 text-gray-600">
-                  <div className="flex items-center gap-2">
-                    {connType(j.source_connection_id) && (
-                      <VendorIcon type={connType(j.source_connection_id)!} size={16} className="shrink-0" />
-                    )}
-                    <span className="truncate">{connName(j.source_connection_id)}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-gray-600">
-                  <div className="flex items-center gap-2">
-                    {connType(j.target_connection_id) && (
-                      <VendorIcon type={connType(j.target_connection_id)!} size={16} className="shrink-0" />
-                    )}
-                    <span className="truncate">{connName(j.target_connection_id)}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-xs text-gray-500 capitalize">{j.migration_mode.replace('_', ' ')}</td>
-                <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                  <div className="flex items-center gap-2 justify-end">
-                    {j.running_execution_id && (
-                      <button
-                        onClick={() => { setExecutionId(j.running_execution_id!); setExecJobId(j.id); setModal('execution') }}
-                        className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
-                        title="View running execution"
-                      >
-                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-                        Running
-                      </button>
-                    )}
-                    <KebabMenu
-                      items={[
-                        j.running_execution_id
-                          ? { label: 'View running execution', icon: <Play size={14} />, onClick: () => { setExecutionId(j.running_execution_id!); setExecJobId(j.id); setModal('execution') } }
-                          : { label: executeMut.isPending && executeMut.variables === j.id ? 'Executing…' : 'Execute', icon: <Play size={14} />, onClick: () => executeMut.mutate(j.id), disabled: executeMut.isPending && executeMut.variables === j.id },
-                        { label: 'Edit', icon: <Edit2 size={14} />, onClick: () => openEdit(j) },
-                        { label: 'Clone', icon: <Copy size={14} />, onClick: () => cloneMut.mutate(j.id) },
-                        { label: 'Export', icon: <Download size={14} />, onClick: () => exportJobMut.mutate(j.id) },
-                        { label: 'Delete', icon: <Trash2 size={14} />, onClick: () => deleteMut.mutate(j.id), danger: true, confirm: 'Delete job?' },
-                      ]}
-                    />
-                  </div>
-                </td>
+      {jobs.length === 0 ? (
+        <div className="bg-white rounded-xl p-10 shadow-sm border text-center text-gray-400 text-sm">
+          No jobs yet — click New Job to get started.
+        </div>
+      ) : viewMode === 'card' ? (
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {sortedJobs.map(j => (
+            <JobCard
+              key={j.id}
+              job={j}
+              sourceName={connName(j.source_connection_id)}
+              sourceType={connType(j.source_connection_id)}
+              targetName={connName(j.target_connection_id)}
+              targetType={connType(j.target_connection_id)}
+              onEdit={() => openEdit(j)}
+              onExecute={() => executeMut.mutate(j.id)}
+              onClone={() => cloneMut.mutate(j.id)}
+              onExport={() => exportJobMut.mutate(j.id)}
+              onDelete={() => deleteMut.mutate(j.id)}
+              onViewExecution={() => { setExecutionId(j.running_execution_id!); setExecJobId(j.id); setModal('execution') }}
+              executing={executeMut.isPending && executeMut.variables === j.id}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <SortableHeader label="Name" sortKey="name" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+                <SortableHeader label="Source" sortKey="source" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+                <SortableHeader label="Target" sortKey="target" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+                <SortableHeader label="Mode" sortKey="migration_mode" activeSortKey={sortKey} sortDirection={sortDirection} onSort={onSort} />
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Actions</th>
               </tr>
-            ))}
-            {jobs.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No jobs yet</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y">
+              {sortedJobs.map(j => (
+                <tr key={j.id} onClick={() => openEdit(j)} className="hover:bg-gray-50 cursor-pointer">
+                  <td className="px-4 py-3 font-medium">{j.name}</td>
+                  <td className="px-4 py-3 text-gray-600">
+                    <div className="flex items-center gap-2">
+                      {connType(j.source_connection_id) && (
+                        <VendorIcon type={connType(j.source_connection_id)!} size={16} className="shrink-0" />
+                      )}
+                      <span className="truncate">{connName(j.source_connection_id)}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    <div className="flex items-center gap-2">
+                      {connType(j.target_connection_id) && (
+                        <VendorIcon type={connType(j.target_connection_id)!} size={16} className="shrink-0" />
+                      )}
+                      <span className="truncate">{connName(j.target_connection_id)}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-500 capitalize">{j.migration_mode.replace('_', ' ')}</td>
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-2 justify-end">
+                      {j.running_execution_id && (
+                        <button
+                          onClick={() => { setExecutionId(j.running_execution_id!); setExecJobId(j.id); setModal('execution') }}
+                          className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
+                          title="View running execution"
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                          Running
+                        </button>
+                      )}
+                      <KebabMenu
+                        items={[
+                          j.running_execution_id
+                            ? { label: 'View running execution', icon: <Play size={14} />, onClick: () => { setExecutionId(j.running_execution_id!); setExecJobId(j.id); setModal('execution') } }
+                            : { label: executeMut.isPending && executeMut.variables === j.id ? 'Executing…' : 'Execute', icon: <Play size={14} />, onClick: () => executeMut.mutate(j.id), disabled: executeMut.isPending && executeMut.variables === j.id },
+                          { label: 'Edit', icon: <Edit2 size={14} />, onClick: () => openEdit(j) },
+                          { label: 'Clone', icon: <Copy size={14} />, onClick: () => cloneMut.mutate(j.id) },
+                          { label: 'Export', icon: <Download size={14} />, onClick: () => exportJobMut.mutate(j.id) },
+                          { label: 'Delete', icon: <Trash2 size={14} />, onClick: () => deleteMut.mutate(j.id), danger: true, confirm: 'Delete job?' },
+                        ]}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {(modal === 'create' || modal === 'edit') && (
         <Modal
