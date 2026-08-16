@@ -21,7 +21,7 @@ from app.services.migration_engine import (
     parquet_table_exists, migrate_parquet_to_db, migrate_db_to_parquet, migrate_parquet_to_parquet,
     avro_table_exists, migrate_avro_to_db, migrate_db_to_avro, migrate_avro_to_avro,
     get_estimated_row_count, get_csv_estimated_row_count, get_parquet_estimated_row_count,
-    get_avro_estimated_row_count, adaptive_batch_size,
+    get_avro_estimated_row_count, adaptive_batch_size, migrate_foreign_keys,
 )
 
 logger = logging.getLogger(__name__)
@@ -287,6 +287,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         total_records = 0
         any_failed = False
         stopped = False
+        created_this_run = []  # (src_table, src_schema) pairs newly created this run
 
         for obj in tables:
             if stop_event.is_set():
@@ -353,6 +354,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                         else:
                             create_target_table(src_engine, tgt_engine, src_table, tgt_table, src_schema, tgt_schema,
                                                 elog=elog, exec_table_id=exec_table_id)
+                            created_this_run.append((src_table, src_schema))
                         elog.info("table_created", f"{table_entry}: target table created",
                                   exec_table_id=exec_table_id)
 
@@ -449,6 +451,18 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 # Continue processing remaining tables instead of aborting
 
         tables_total = len(tables)
+
+        if created_this_run and not stopped:
+            try:
+                job_table_names = {obj.name for obj in tables}
+                fk_count = migrate_foreign_keys(
+                    src_engine, tgt_engine, created_this_run, job_table_names, tgt_schema, elog=elog
+                )
+                if fk_count:
+                    elog.info("foreign_keys_created", f"Added {fk_count} foreign key{'s' if fk_count != 1 else ''} to newly created tables")
+            except Exception as exc:
+                logger.error(f"Foreign key migration failed for job {job_id}: {exc}")
+                elog.info("foreign_key_phase_failed", f"Could not complete foreign key migration: {str(exc)[:300]}")
 
         if stopped:
             final_status = "cancelled"

@@ -4,7 +4,7 @@ import os
 import re
 import time
 import sqlalchemy as sa
-from sqlalchemy import inspect, text, MetaData, Table, Column
+from sqlalchemy import inspect, text, MetaData, Table, Column, Index, CheckConstraint
 from sqlalchemy import String, Text, Integer, BigInteger, Float, Double, Numeric, Boolean, Date, DateTime
 from sqlalchemy.engine import Engine, URL
 from sqlalchemy.exc import OperationalError, DBAPIError
@@ -330,18 +330,159 @@ def create_target_table(src_engine: Engine, tgt_engine: Engine,
                          src_table: str, tgt_table: str,
                          src_schema: Optional[str], tgt_schema: Optional[str],
                          elog=None, exec_table_id=None):
-    """Reflect source table, map types, create on target."""
+    """Reflect source table, map types, create on target.
+
+    Also carries over the source's primary key and non-PK indexes (unique +
+    column list only — an expression-based index isn't portable and is
+    skipped) since both are structural and mean the same thing on any
+    dialect. CHECK constraints are copied verbatim only when source and
+    target share a dialect: the expression text isn't translated, and a
+    constraint written for a different dialect's syntax could silently apply
+    as something else entirely, so a cross-dialect constraint is disclosed
+    and skipped rather than guessed at.
+
+    Foreign keys are deliberately not created here — that's a post-load
+    phase (see migrate_foreign_keys) since a referenced table in the same
+    job may not exist yet at table-creation time.
+
+    An identity/auto-increment source column is disclosed but never
+    recreated on the target: the target is about to be bulk-loaded with the
+    source's own values, which a live generator would collide with.
+    """
     src = reflect_table(src_engine, src_table, src_schema)
     tgt_meta = MetaData()
+    pk_cols = set(src.primary_key.columns.keys())
+    identity_cols = [c.name for c in src.columns if c.autoincrement is True and c.name in pk_cols]
     cols = []
     for col in src.columns:
-        cols.append(Column(col.name, to_generic_type(col.type), nullable=col.nullable))
+        cols.append(Column(
+            col.name, to_generic_type(col.type),
+            nullable=col.nullable,
+            primary_key=col.name in pk_cols,
+            autoincrement=False,
+        ))
     tgt = Table(tgt_table, tgt_meta, *cols, schema=tgt_schema)
+
+    try:
+        src_indexes = inspect(src_engine).get_indexes(src_table, schema=src_schema)
+    except Exception:
+        src_indexes = []
+    index_count = 0
+    seen_index_names = set()
+    for idx in src_indexes:
+        col_names = idx.get("column_names") or []
+        if not col_names or any(c is None for c in col_names):
+            continue  # expression-based index — not portable, skip
+        if set(col_names) == pk_cols:
+            continue  # some dialects (e.g. MySQL "PRIMARY") list the PK's own index here too
+        if not all(c in tgt.c for c in col_names):
+            continue
+        # Always derive the name from the target table rather than reusing the
+        # source's own index name verbatim: index names live in a per-schema
+        # (not per-table) namespace in Postgres/MSSQL, so reusing the source's
+        # name collides whenever source and target share a schema.
+        name = f"ix_{tgt_table}_{'_'.join(col_names)}"[:63]
+        if name in seen_index_names:
+            continue
+        seen_index_names.add(name)
+        Index(name, *[tgt.c[c] for c in col_names], unique=bool(idx.get("unique")))
+        index_count += 1
+
+    check_count = 0
+    if src_engine.dialect.name == tgt_engine.dialect.name:
+        try:
+            src_checks = inspect(src_engine).get_check_constraints(src_table, schema=src_schema)
+        except Exception:
+            src_checks = []
+        for chk in src_checks:
+            sqltext = chk.get("sqltext")
+            if not sqltext:
+                continue
+            tgt.append_constraint(CheckConstraint(sqltext, name=chk.get("name")))
+            check_count += 1
+
     tgt_full = _full_table(tgt_schema, tgt_table, tgt_engine.dialect.name)
     ddl = str(CreateTable(tgt).compile(dialect=tgt_engine.dialect)).strip()
     _log_sql(elog, exec_table_id, "create_table",
              f"CREATE TABLE {tgt_full}", ddl, target=tgt_full)
     tgt_meta.create_all(tgt_engine)
+
+    if identity_cols and elog is not None:
+        elog.info("identity_not_recreated",
+                  f"{tgt_table}: source identity/auto-increment column(s) {', '.join(identity_cols)} "
+                  f"will be loaded with source values, not regenerated",
+                  exec_table_id=exec_table_id)
+    if (index_count or check_count) and elog is not None:
+        elog.info("constraints_created",
+                  f"{tgt_table}: created {index_count} index{'es' if index_count != 1 else ''} "
+                  f"and {check_count} CHECK constraint{'s' if check_count != 1 else ''} from source",
+                  exec_table_id=exec_table_id, indexes=index_count, check_constraints=check_count)
+
+
+def migrate_foreign_keys(
+    src_engine: Engine, tgt_engine: Engine,
+    created: list,
+    job_table_names: set,
+    tgt_schema: Optional[str],
+    elog=None,
+) -> int:
+    """Best-effort post-load phase: recreate foreign keys on tables this job
+    just auto-created, once every table in the job has finished loading so a
+    self-referencing or forward-referencing FK always finds its target
+    already in place on the target — no dependency graph needed, the
+    phase's position in the run is the ordering.
+
+    ``created`` is the list of (src_table, src_schema) pairs this run
+    actually created a target table for (never a pre-existing one, matching
+    create_target_table's own "never alters an existing table" contract).
+    A referenced table outside the job's own selection, or any FK whose
+    ALTER TABLE fails for another reason, is skipped with a logged warning
+    rather than failing the job. Returns the number of foreign keys applied.
+    """
+    dialect = tgt_engine.dialect.name
+    applied = 0
+    for src_table, src_schema in created:
+        try:
+            src = reflect_table(src_engine, src_table, src_schema)
+        except Exception as exc:
+            if elog is not None:
+                elog.info("fk_reflect_failed", f"{src_table}: could not reflect foreign keys: {str(exc)[:300]}")
+            continue
+
+        for fk in src.foreign_key_constraints:
+            referred_table = fk.referred_table.name
+            if referred_table not in job_table_names:
+                if elog is not None:
+                    elog.info("fk_skipped",
+                              f"{src_table}: FK to '{referred_table}' skipped — that table isn't part of this job's selection")
+                continue
+
+            local_cols = [c.name for c in fk.columns]
+            referred_cols = [e.column.name for e in fk.elements]
+            constraint_name = f"fk_{src_table}_{'_'.join(local_cols)}"[:63]
+            tgt_full = _full_table(tgt_schema, src_table, dialect)
+            ref_full = _full_table(tgt_schema, referred_table, dialect)
+            local_col_list = ", ".join(_quote_ident(c, dialect) for c in local_cols)
+            ref_col_list = ", ".join(_quote_ident(c, dialect) for c in referred_cols)
+            ddl = (
+                f"ALTER TABLE {tgt_full} ADD CONSTRAINT {_quote_ident(constraint_name, dialect)} "
+                f"FOREIGN KEY ({local_col_list}) REFERENCES {ref_full} ({ref_col_list})"
+            )
+            if fk.ondelete:
+                ddl += f" ON DELETE {fk.ondelete}"
+            if fk.onupdate:
+                ddl += f" ON UPDATE {fk.onupdate}"
+
+            try:
+                with tgt_engine.begin() as conn:
+                    conn.execute(text(ddl))
+                _log_sql(elog, None, "add_foreign_key", f"{src_table}: added foreign key to {referred_table}", ddl)
+                applied += 1
+            except Exception as exc:
+                if elog is not None:
+                    elog.info("fk_apply_failed",
+                              f"{src_table}: could not add foreign key to '{referred_table}': {str(exc)[:300]}")
+    return applied
 
 
 # Rows sampled from a CSV/TSV/Avro file to infer column types (and size
