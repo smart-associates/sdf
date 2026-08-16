@@ -2,6 +2,7 @@
 import json
 import time
 import threading
+import traceback
 import logging
 from datetime import datetime, timezone
 from sqlalchemy import create_engine
@@ -76,6 +77,45 @@ def shutdown_all(timeout: float = 30) -> None:
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _capture_failure_meta(exc: Exception) -> dict:
+    """Build a table_failed log's meta from a table-migration exception.
+
+    Walks the exception chain (exc, __cause__, __context__) looking for a
+    SQLAlchemy statement attribute — some code paths wrap/re-raise without
+    preserving .statement on the outermost exception — and captures the last
+    3 traceback frames, enough to pinpoint the call site when no SQL is
+    attached.
+    """
+    failing_sql = None
+    seen = set()
+    cur = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        stmt = getattr(cur, "statement", None)
+        if stmt:
+            try:
+                failing_sql = str(stmt)
+            except Exception:
+                failing_sql = None
+            if failing_sql:
+                break
+        cur = getattr(cur, "__cause__", None) or getattr(cur, "__context__", None)
+
+    tb_tail = None
+    try:
+        frames = traceback.format_tb(exc.__traceback__) or []
+        tb_tail = "".join(frames[-3:]).strip() or None
+    except Exception:
+        tb_tail = None
+
+    meta = {"error": str(exc)[:1000], "error_type": type(exc).__name__}
+    if failing_sql:
+        meta["sql"] = failing_sql[:4000]
+    if tb_tail:
+        meta["traceback"] = tb_tail[:2000]
+    return meta
 
 
 def _get_setting_sync(key: str, default: str) -> str:
@@ -394,14 +434,16 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                 stopped = True
                 break
             except Exception as e:
-                logger.error(f"Table {table_entry} failed: {e}")
-                elog.error("table_failed", f"{table_entry}: {str(e)[:500]}",
-                           exec_table_id=exec_table_id, error=str(e)[:1000])
+                err_msg = str(e)
+                err_meta = _capture_failure_meta(e)
+                logger.error(f"Table {table_entry} failed: {err_msg}")
+                elog.error("table_failed", f"{table_entry}: {err_msg[:500]}",
+                           exec_table_id=exec_table_id, **err_meta)
                 _update_exec_table_sync(
                     exec_table_id,
                     status="failed",
                     completed_at=_now_utc(),
-                    error_message=str(e)[:1000]
+                    error_message=err_msg[:1000]
                 )
                 any_failed = True
                 # Continue processing remaining tables instead of aborting

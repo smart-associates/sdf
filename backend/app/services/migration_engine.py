@@ -138,7 +138,15 @@ def _sanitize_exc(fn):
             msg = str(e).replace("\x00", "")
             if not msg:
                 msg = f"{type(e).__name__} (no message — original contained only NUL bytes)"
-            raise Exception(msg) from None
+            new_exc = Exception(msg)
+            # Preserve the failing SQL statement (if any) for step logs.
+            stmt = getattr(e, "statement", None)
+            if stmt:
+                try:
+                    new_exc.statement = str(stmt).replace("\x00", "")
+                except Exception:
+                    pass
+            raise new_exc from None
     return wrapper
 
 

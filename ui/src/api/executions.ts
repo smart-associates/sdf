@@ -50,12 +50,16 @@ export interface LogEntry {
   level: string
   event_type: string
   message: string
-  metadata?: Record<string, unknown>
+  meta?: Record<string, unknown>
   created_at: string
 }
 
-export const getExecutionLogs = (execId: number) =>
-  client.get<LogEntry[]>(`/executions/${execId}/logs`).then(r => r.data)
+// `level=info` on the backend filters OUT detail rows; passing no param returns
+// info + detail + error. Callers pass `includeDetail=true` to get the full set.
+export const getExecutionLogs = (execId: number, includeDetail = false) =>
+  client.get<LogEntry[]>(`/executions/${execId}/logs`,
+    { params: includeDetail ? undefined : { level: 'info' } })
+    .then(r => r.data)
 
 export const getStats = (days?: number) =>
   client.get<ExecutionStats>('/executions/stats', { params: { days } }).then(r => r.data)

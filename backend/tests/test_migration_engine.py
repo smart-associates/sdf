@@ -3,8 +3,38 @@ import sqlalchemy as sa
 from app.services.migration_engine import (
     create_target_table_from_file, table_exists,
     migrate_csv_to_db, migrate_db_to_csv,
-    adaptive_batch_size,
+    adaptive_batch_size, _sanitize_exc,
 )
+
+
+def test_sanitize_exc_preserves_statement_for_step_logs():
+    """A DBAPI-style error carrying .statement must survive re-raising through
+    _sanitize_exc so job_runner can surface the failing SQL (issue #22)."""
+    @_sanitize_exc
+    def boom():
+        exc = ValueError("duplicate key value violates unique constraint")
+        exc.statement = "INSERT INTO orders (id) VALUES (1)"
+        raise exc
+
+    try:
+        boom()
+        assert False, "expected an exception"
+    except Exception as e:
+        assert "duplicate key" in str(e)
+        assert e.statement == "INSERT INTO orders (id) VALUES (1)"
+
+
+def test_sanitize_exc_strips_nul_bytes_and_has_no_statement_when_absent():
+    @_sanitize_exc
+    def boom():
+        raise ValueError("bad value \x00 here")
+
+    try:
+        boom()
+        assert False, "expected an exception"
+    except Exception as e:
+        assert "\x00" not in str(e)
+        assert getattr(e, "statement", None) is None
 
 
 def test_adaptive_batch_size_scales_with_row_count():
