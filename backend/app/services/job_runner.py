@@ -285,6 +285,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                   table_count=len(tables))
 
         total_records = 0
+        tables_ok = 0
         any_failed = False
         stopped = False
         created_this_run = []  # (src_table, src_schema) pairs newly created this run
@@ -414,6 +415,7 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
                     )
 
                 total_records += count
+                tables_ok += 1
                 duration_ms = int((time.monotonic() - table_start_mono) * 1000)
                 duration_s = duration_ms / 1000
                 elog.info("table_completed",
@@ -471,8 +473,8 @@ def _run_job_thread(job_id: int, execution_id: int, stop_event: threading.Event)
         elif any_failed:
             final_status = "failed"
             final_error = "One or more tables failed — see table details"
-            elog.error("job_failed", f"Job failed: see table details ({total_records:,} rows migrated)",
-                       total_rows=total_records, tables_total=tables_total)
+            elog.error("job_failed", f"Job failed: {tables_ok}/{tables_total} tables, {total_records:,} rows migrated",
+                       total_rows=total_records, tables_ok=tables_ok, tables_total=tables_total)
         else:
             final_status = "success"
             final_error = None
