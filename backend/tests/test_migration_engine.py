@@ -4,6 +4,7 @@ from app.services.migration_engine import (
     create_target_table_from_file, table_exists,
     migrate_csv_to_db, migrate_db_to_csv,
     adaptive_batch_size, _sanitize_exc,
+    _is_transient_reflection_error, _retry_reflection,
 )
 
 
@@ -35,6 +36,69 @@ def test_sanitize_exc_strips_nul_bytes_and_has_no_statement_when_absent():
     except Exception as e:
         assert "\x00" not in str(e)
         assert getattr(e, "statement", None) is None
+
+
+def test_is_transient_reflection_error_detects_operational_and_interface_errors():
+    assert _is_transient_reflection_error(sa.exc.OperationalError("stmt", {}, Exception("lost connection")))
+    assert _is_transient_reflection_error(sa.exc.InterfaceError("stmt", {}, Exception("connection reset")))
+
+
+def test_is_transient_reflection_error_walks_exception_chain():
+    inner = sa.exc.OperationalError("stmt", {}, Exception("timeout"))
+    wrapped = RuntimeError("wrapped")
+    wrapped.__cause__ = inner
+    assert _is_transient_reflection_error(wrapped)
+
+
+def test_is_transient_reflection_error_false_for_genuine_schema_errors():
+    assert not _is_transient_reflection_error(sa.exc.ProgrammingError("stmt", {}, Exception("no such table")))
+    assert not _is_transient_reflection_error(ValueError("not a db error at all"))
+
+
+def test_retry_reflection_retries_transient_then_succeeds(monkeypatch):
+    monkeypatch.setattr("app.services.migration_engine.time.sleep", lambda s: None)
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise sa.exc.OperationalError("stmt", {}, Exception("lost connection"))
+        return "ok"
+
+    result = _retry_reflection(flaky, description="test", max_attempts=3, initial_delay=0.01)
+    assert result == "ok"
+    assert calls["n"] == 3
+
+
+def test_retry_reflection_gives_up_after_max_attempts(monkeypatch):
+    monkeypatch.setattr("app.services.migration_engine.time.sleep", lambda s: None)
+    calls = {"n": 0}
+
+    def always_flaky():
+        calls["n"] += 1
+        raise sa.exc.OperationalError("stmt", {}, Exception("lost connection"))
+
+    try:
+        _retry_reflection(always_flaky, description="test", max_attempts=3, initial_delay=0.01)
+        assert False, "expected an exception"
+    except sa.exc.OperationalError:
+        pass
+    assert calls["n"] == 3
+
+
+def test_retry_reflection_does_not_retry_non_transient_errors():
+    calls = {"n": 0}
+
+    def boom():
+        calls["n"] += 1
+        raise ValueError("permission denied")
+
+    try:
+        _retry_reflection(boom, description="test", max_attempts=3, initial_delay=0.01)
+        assert False, "expected an exception"
+    except ValueError:
+        pass
+    assert calls["n"] == 1
 
 
 def test_adaptive_batch_size_scales_with_row_count():

@@ -150,6 +150,57 @@ def _sanitize_exc(fn):
     return wrapper
 
 
+def _is_transient_reflection_error(exc: Exception) -> bool:
+    """True if exc looks like a transient connection error worth retrying.
+
+    Walks the exception chain (orig/__cause__/__context__) looking for
+    SQLAlchemy's own connection-level exception classes (OperationalError,
+    InterfaceError), which every DBAPI driver's transient failures — lost
+    connection, timeout, connection refused — get wrapped into. Genuine
+    schema/permission errors (ProgrammingError, NoSuchTableError,
+    NotImplementedError for a reflection method a dialect doesn't support)
+    are left to propagate immediately.
+    """
+    seen: set = set()
+    queue = [exc]
+    while queue:
+        cur = queue.pop()
+        if cur is None or id(cur) in seen:
+            continue
+        seen.add(id(cur))
+        if isinstance(cur, (sa.exc.OperationalError, sa.exc.InterfaceError)):
+            return True
+        for attr in ("orig", "__cause__", "__context__"):
+            queue.append(getattr(cur, attr, None))
+    return False
+
+
+def _retry_reflection(fn, *, description: str,
+                       max_attempts: int = 3,
+                       initial_delay: float = 2.0,
+                       max_delay: float = 20.0):
+    """Retry fn() on transient connection errors during schema reflection.
+
+    Delays follow 2s, 4s (doubling, capped at max_delay). Non-transient
+    errors — including real schema/permission failures — propagate
+    immediately; the last attempt re-raises. fn() must be idempotent, which
+    every caller here is: read-only reflection against a fresh connection.
+    """
+    delay = initial_delay
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return fn()
+        except Exception as e:
+            if not _is_transient_reflection_error(e) or attempt >= max_attempts:
+                raise
+            logger.warning(
+                "%s: transient error on reflection attempt %d/%d: %s: %s; retrying in %.1fs",
+                description, attempt, max_attempts, type(e).__name__, e, delay,
+            )
+            time.sleep(delay)
+            delay = min(delay * 2, max_delay)
+
+
 def _connect_timeout_args(db_type: str) -> dict:
     """Return driver-specific connect timeout args (10s) for the initial connection.
 
@@ -320,9 +371,20 @@ def get_parquet_estimated_row_count(directory: str, table: str) -> Optional[int]
 
 
 def reflect_table(engine: Engine, table_name: str, schema: Optional[str] = None) -> Table:
-    meta = MetaData()
-    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        return Table(table_name, meta, autoload_with=conn, schema=schema)
+    def _do():
+        meta = MetaData()
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            # resolve_fks=False: by default SQLAlchemy recursively reflects every
+            # table a foreign key refers to into the same MetaData, which raises
+            # NoSuchTableError if any referenced table isn't reflectable (missing
+            # permissions, dropped, cross-database) — a failure mode unrelated to
+            # what the caller asked to reflect. FK metadata itself
+            # (Table.foreign_key_constraints) is still populated; callers that
+            # need the referenced table/column name read it off
+            # ForeignKey.target_fullname instead of the (possibly-unresolved)
+            # .column/.referred_table.
+            return Table(table_name, meta, autoload_with=conn, schema=schema, resolve_fks=False)
+    return _retry_reflection(_do, description=f"reflect_table({schema}.{table_name})")
 
 
 @_sanitize_exc
@@ -364,7 +426,10 @@ def create_target_table(src_engine: Engine, tgt_engine: Engine,
     tgt = Table(tgt_table, tgt_meta, *cols, schema=tgt_schema)
 
     try:
-        src_indexes = inspect(src_engine).get_indexes(src_table, schema=src_schema)
+        src_indexes = _retry_reflection(
+            lambda: inspect(src_engine).get_indexes(src_table, schema=src_schema),
+            description=f"get_indexes({src_schema}.{src_table})",
+        )
     except Exception:
         src_indexes = []
     index_count = 0
@@ -391,7 +456,10 @@ def create_target_table(src_engine: Engine, tgt_engine: Engine,
     check_count = 0
     if src_engine.dialect.name == tgt_engine.dialect.name:
         try:
-            src_checks = inspect(src_engine).get_check_constraints(src_table, schema=src_schema)
+            src_checks = _retry_reflection(
+                lambda: inspect(src_engine).get_check_constraints(src_table, schema=src_schema),
+                description=f"get_check_constraints({src_schema}.{src_table})",
+            )
         except Exception:
             src_checks = []
         for chk in src_checks:
@@ -450,7 +518,14 @@ def migrate_foreign_keys(
             continue
 
         for fk in src.foreign_key_constraints:
-            referred_table = fk.referred_table.name
+            # reflect_table() reflects with resolve_fks=False (a referenced
+            # table that isn't itself reflectable shouldn't break reflecting
+            # this one), so the referenced table/column names are read off
+            # each element's raw "[schema.]table.column" string instead of
+            # the (unresolved) .column/.referred_table.
+            ref_parts = [e.target_fullname.split(".") for e in fk.elements]
+            referred_table = ref_parts[0][-2]
+            referred_cols = [p[-1] for p in ref_parts]
             if referred_table not in job_table_names:
                 if elog is not None:
                     elog.info("fk_skipped",
@@ -458,7 +533,6 @@ def migrate_foreign_keys(
                 continue
 
             local_cols = [c.name for c in fk.columns]
-            referred_cols = [e.column.name for e in fk.elements]
             constraint_name = f"fk_{src_table}_{'_'.join(local_cols)}"[:63]
             tgt_full = _full_table(tgt_schema, src_table, dialect)
             ref_full = _full_table(tgt_schema, referred_table, dialect)
@@ -667,9 +741,10 @@ def create_target_table_from_file(tgt_engine: Engine, src_dir: str, src_table: s
 
 
 def table_exists(engine: Engine, table_name: str, schema: Optional[str] = None) -> bool:
-    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        insp = inspect(conn)
-        return insp.has_table(table_name, schema=schema)
+    def _do():
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            return inspect(conn).has_table(table_name, schema=schema)
+    return _retry_reflection(_do, description=f"table_exists({schema}.{table_name})")
 
 
 @_sanitize_exc
