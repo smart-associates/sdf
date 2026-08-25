@@ -128,6 +128,7 @@ function ExecutionDetail({ execution: e }: { execution: Execution }) {
               <th className="text-left py-1">Table</th>
               <th className="text-left py-1">Status</th>
               <th className="text-right py-1">Records</th>
+              <th className="text-right py-1 pl-4">Duration</th>
               <th className="text-left py-1 pl-4 w-32">Progress</th>
               <th className="text-left py-1 pl-4">Error</th>
             </tr>
@@ -158,6 +159,7 @@ function ExecutionDetail({ execution: e }: { execution: Execution }) {
                         <span className="text-gray-400"> / ~{t.estimated_row_count.toLocaleString()}</span>
                       )}
                     </td>
+                    <td className="py-1 pl-4 text-right whitespace-nowrap">{duration(t)}</td>
                     <td className="py-1 pl-4 w-32">
                       {t.status === 'running' && pct != null ? (
                         <div className="flex items-center gap-1">
@@ -172,7 +174,7 @@ function ExecutionDetail({ execution: e }: { execution: Execution }) {
                   </tr>
                   {isOpen && (
                     <tr>
-                      <td colSpan={5} className="pb-2 pl-6">
+                      <td colSpan={6} className="pb-2 pl-6">
                         <div className="max-h-64 overflow-y-auto border rounded bg-white text-xs font-mono">
                           <LogList logs={tableLogs} isLoading={isLoading} emptyMessage="No step logs for this table" />
                         </div>
@@ -189,7 +191,7 @@ function ExecutionDetail({ execution: e }: { execution: Execution }) {
   )
 }
 
-function duration(e: Execution): string {
+function duration(e: { started_at: string; completed_at?: string }): string {
   if (!e.completed_at) return '—'
   const ms = new Date(e.completed_at).getTime() - new Date(e.started_at).getTime()
   return ms < 60000 ? `${Math.round(ms / 1000)}s` : `${Math.round(ms / 60000)}m`
