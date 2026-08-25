@@ -241,14 +241,23 @@ For filesystem connections (CSV, Parquet, or Avro files), set **Database** to th
 Navigate to **Jobs** → **New Job**.
 
 - **Source Connection** — where data comes from
-- **Source Tables** — one table name per line (e.g. `public.orders`). Prefix a line with `#` to temporarily disable it without removing it.
-- **Table Filter** — optional WHERE clause applied to each table (e.g. `created_at > '2024-01-01'`)
+- **Source Tables** — add one or more tables/views to replicate. Either type a
+  name directly (e.g. `public.orders`), or click **Browse…** to pick from the
+  source's actual schemas and tables (or, for a filesystem source, its files).
+  There's no wildcard/pattern matching — every entry is one exact object. Each
+  table has its own optional **Filter** (a WHERE clause, e.g.
+  `created_at > '2024-01-01'`) and can be temporarily disabled without removing
+  it.
 - **Target Connection** — where data goes
 - **Target Schema** — schema to write into on the target (leave blank to use default)
-- **Create Target Table** — auto-create the table if it doesn't exist
+- **Create Target Table** — auto-create a target table if it doesn't exist yet,
+  including its primary key, non-PK indexes, CHECK constraints, and (once every
+  table in the job has loaded) foreign keys
 - **Migration Mode** — `append` to add rows, `truncate_load` to replace all data
 
-Click **Validate** to check that source tables exist and the job configuration is valid.
+Click **Validate** to check that the saved job's source tables exist and the
+configuration is valid — it's disabled while the form has unsaved changes,
+since it checks the saved job, not what's currently in the form.
 
 ### 3. Run the job
 
@@ -294,11 +303,16 @@ npx vitest
 
 ## Settings
 
-Navigate to **Settings** to configure system-wide defaults. The following setting is seeded automatically on first startup:
+Navigate to **Settings** to configure system-wide defaults. The following settings are seeded automatically on first startup:
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `maximum_batch_size` | `100000` | Upper bound on rows per batch. The actual batch size is chosen per table as ~1% of its estimated row count (floored at 1,000), so small tables use small batches and large tables ramp up to this ceiling. |
+| `csv_quoting` | `none` | Quote character for CSV export: `none` (backslash-escape instead), `single`, or `double`. |
+| `csv_delimiter` | `,` | Field delimiter for CSV output. Use escape sequences for control characters, e.g. `\t` (tab) or `\001` (SOH). |
+| `csv_null_value` | _(empty)_ | Sentinel string written for NULL fields in CSV output, and recognized as NULL when reading CSV back in. Leave blank for empty-string NULLs. |
+| `csv_header` | `true` | Include column headers in CSV export. |
+| `log_level` | `minimal` | Logging verbosity for job executions: `minimal` (key events only) or `detailed` (includes batch progress). |
 
 You can add additional custom settings via the Settings page or the `/api/settings` API endpoint.
 

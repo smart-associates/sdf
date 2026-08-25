@@ -25,7 +25,7 @@ LABEL org.opencontainers.image.title="SDF" \
       org.opencontainers.image.description="Smart Data Frameworks - web-based data migration tool" \
       org.opencontainers.image.source="https://github.com/smart-associates/sdf" \
       org.opencontainers.image.url="https://hub.docker.com/r/smartassociates/sdf" \
-      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.licenses="BUSL-1.1" \
       org.opencontainers.image.version="${SDF_VERSION}" \
       org.opencontainers.image.revision="${SDF_GIT_SHA}"
 

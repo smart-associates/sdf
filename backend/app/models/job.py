@@ -32,7 +32,7 @@ class JobTable(Base):
     Each row names a single object to replicate (``schema_name`` + ``object_name``)
     with an optional per-object WHERE filter. ``position`` sets migration order and
     ``enabled`` lets a row be kept but skipped. Community is include-only and
-    literal-only — no glob patterns or catalog browsing (those stay Pro).
+    literal-only — no glob patterns (those stay Pro).
     """
     __tablename__ = "job_tables"
 

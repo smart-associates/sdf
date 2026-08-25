@@ -12,10 +12,14 @@ A web-based data migration tool for moving data between databases and file forma
 - **Connection testing** — validate credentials before running jobs
 - **Stop support** — cancel running jobs from the UI
 - **Job validation** — verify source tables exist and configuration is valid before running
-- **Auto-create target tables** — automatically create tables on the target database if they don't exist
-- **Retry with backoff** — transient database errors are retried automatically (1s, 3s, 10s)
+- **Retry with backoff** — transient database errors are retried automatically, both during schema reflection (2s, 4s, doubling up to 20s) and batch inserts (1s, 3s, 10s)
 - **Graceful shutdown** — running migrations are given up to 30 seconds to complete on shutdown
-- **Deletion safety** — connections and jobs cannot be deleted while a job is actively running
+- **Deletion safety** — connections and jobs cannot be deleted while referenced by any job, running or not
+- **Catalog browsing** — pick source tables/views (or files) from a connection's live schema instead of typing them by hand
+- **Export / import** — download a connection's or job's configuration as credential-free JSON, and re-import it elsewhere
+- **Auto-create target tables** — automatically create tables on the target database if they don't exist, including primary key, non-PK indexes, CHECK constraints, and foreign keys
+- **In-app user guide** — a built-in Guide page covering setup and every major feature
+- **Card/list views** — toggle how Connections and Jobs are displayed; choice is remembered
 - **Dashboard** — aggregate stats, charts, and recent activity at a glance
 
 ## Architecture
@@ -104,7 +108,11 @@ sdf/
 │   ├── src/
 │   │   ├── api/           # Axios API client functions
 │   │   ├── pages/         # Page components
-│   │   └── components/    # Shared UI components
+│   │   ├── components/    # Shared UI components
+│   │   ├── hooks/         # Shared React hooks
+│   │   ├── guide/         # In-app user guide content + loader
+│   │   ├── lib/           # Small shared utilities
+│   │   └── assets/        # Static assets (logo, etc.)
 │   └── package.json
 ├── Dockerfile             # Unified image (UI build + FastAPI runtime)
 ├── docker-compose.yml     # Single-service wrapper around the unified image
@@ -122,20 +130,32 @@ Interactive API docs are available at [http://localhost:8000/docs](http://localh
 |--------|------|-------------|
 | GET | `/api/connections` | List database connections |
 | POST | `/api/connections` | Create a connection |
+| GET | `/api/connections/export` | Export all connections as credential-free JSON |
 | GET | `/api/connections/{id}` | Get a connection |
+| GET | `/api/connections/{id}/export` | Export a single connection as credential-free JSON |
+| POST | `/api/connections/import` | Import connections from JSON |
 | PUT | `/api/connections/{id}` | Update a connection |
 | DELETE | `/api/connections/{id}` | Delete a connection |
 | POST | `/api/connections/{id}/test` | Test a connection |
+| POST | `/api/connections/{id}/clone` | Clone a connection |
+| GET | `/api/connections/{id}/schemas` | List schemas on a connection |
+| GET | `/api/connections/{id}/objects` | List tables/views in a schema |
+| GET | `/api/connections/{id}/files` | List files (filesystem connections) |
 | GET | `/api/jobs` | List jobs |
 | POST | `/api/jobs` | Create a job |
+| GET | `/api/jobs/export` | Export all jobs as credential-free JSON |
+| GET | `/api/jobs/{id}/export` | Export a single job as credential-free JSON |
+| POST | `/api/jobs/import` | Import jobs from JSON |
 | GET | `/api/jobs/{id}` | Get a job |
 | PUT | `/api/jobs/{id}` | Update a job |
 | DELETE | `/api/jobs/{id}` | Delete a job |
 | POST | `/api/jobs/{id}/validate` | Validate job configuration |
 | POST | `/api/jobs/{id}/execute` | Run a job |
+| POST | `/api/jobs/{id}/clone` | Clone a job |
 | POST | `/api/jobs/{id}/executions/{exec_id}/stop` | Stop a running job |
 | GET | `/api/executions` | List executions (filter by `job_id`, paginate with `limit`/`offset`) |
 | GET | `/api/executions/{id}` | Get execution with per-table details |
+| GET | `/api/executions/{id}/logs` | Get step-by-step logs for an execution |
 | GET | `/api/executions/stats` | System-wide stats and recent executions |
 | GET | `/api/settings` | List settings |
 | POST | `/api/settings` | Create a setting |
@@ -157,3 +177,7 @@ Interactive API docs are available at [http://localhost:8000/docs](http://localh
 
 - **append** — INSERT rows into the target table (preserves existing data)
 - **truncate_load** — TRUNCATE then INSERT (full refresh)
+
+## License
+
+SDF is licensed under the [Business Source License 1.1](LICENSE). See [CONTRIBUTING.md](CONTRIBUTING.md#license) for what that means for contributions.
