@@ -6,6 +6,7 @@ import {
   Briefcase,
   ScrollText,
   Settings,
+  HelpCircle,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -18,6 +19,7 @@ const nav = [
   { to: '/jobs', icon: Briefcase, label: 'Jobs' },
   { to: '/logs', icon: ScrollText, label: 'Logs' },
   { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/guide', icon: HelpCircle, label: 'Guide' },
 ]
 
 const SIDEBAR_COLLAPSED_KEY = 'sidebar:collapsed'
