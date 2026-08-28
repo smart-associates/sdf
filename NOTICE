@@ -45,11 +45,10 @@ NOTICE and the LICENSE file differ, the LICENSE file governs.
 
 6. Third-party components
    The Software includes third-party open source components, each governed by
-   its own licence. A complete list of those components and their licences is
-   set out below.
-
-   [TO BE COMPLETED FROM THE BUILD SBOM BEFORE PUBLICATION. This file must not
-   ship with this section left as a placeholder. Owner: Adam / Shaneel.]
+   its own licence. The complete list of those components and their licences
+   is set out in THIRD_PARTY_NOTICES.txt, which accompanies this NOTICE and is
+   regenerated from the pinned dependency manifests
+   (backend/requirements.txt, ui/package.json) on each release.
 
 7. Export
    You are responsible for ensuring that your use, export or re-export of the

@@ -1,0 +1,254 @@
+THIRD-PARTY NOTICES
+====================
+
+Smart Data Frameworks (SDF), Community edition, includes the following
+third-party open source components. This list is generated from the
+pinned dependency manifests (backend/requirements.txt, ui/package.json)
+and covers every package installed into the published Docker image,
+either as an installed Python package or bundled into the compiled
+frontend assets. Referenced from NOTICE, item 6.
+
+Each component is licensed under the terms noted below, as stated by
+that component's own package metadata. Those terms apply to that
+component; they do not alter the license under which SDF itself is
+distributed (see LICENSE).
+
+Generated: 2026-08-28, from backend
+requirements.txt (Python 3.11) and ui/package.json production
+dependencies. Regenerate on each release (see GETTING_STARTED.md).
+
+--------------------------------------------------------------------
+Backend (Python)
+--------------------------------------------------------------------
+
+Package                   Version    License                                              Project
+-------------------------------------------------------------------------------------------------
+aiosqlite                 0.20.0     MIT License                                          https://aiosqlite.omnilib.dev
+alembic                   1.13.1     MIT License                                          https://alembic.sqlalchemy.org
+annotated-types           0.7.0      MIT License                                          https://github.com/annotated-types/annotated-types
+anyio                     4.12.1     MIT                                                  https://anyio.readthedocs.io/en/stable/versionhistory.html
+async-timeout             5.0.1      Apache Software License                              https://github.com/aio-libs/async-timeout
+asyncpg                   0.29.0     Apache Software License                              UNKNOWN
+backports.asyncio.runner  1.2.0      Python Software Foundation License                   https://github.com/samypr100/backports.asyncio.runner
+certifi                   2026.2.25  Mozilla Public License 2.0 (MPL 2.0)                 https://github.com/certifi/python-certifi
+cffi                      2.0.0      MIT                                                  https://cffi.readthedocs.io/en/latest/whatsnew.html
+click                     8.1.8      BSD License                                          https://github.com/pallets/click/
+cryptography              42.0.0     Apache Software License; BSD License                 https://github.com/pyca/cryptography
+exceptiongroup            1.3.1      MIT License                                          https://github.com/agronholm/exceptiongroup/blob/main/CHANGES.rst
+fastapi                   0.109.0    MIT                                                  https://github.com/tiangolo/fastapi
+fastavro                  1.9.3      MIT License                                          https://github.com/fastavro/fastavro
+greenlet                  3.2.5      MIT AND Python-2.0                                   https://greenlet.readthedocs.io/
+h11                       0.16.0     MIT License                                          https://github.com/python-hyper/h11
+httpcore                  1.0.9      BSD-3-Clause                                         https://www.encode.io/httpcore/
+httptools                 0.7.1      MIT                                                  https://github.com/MagicStack/httptools
+httpx                     0.27.0     BSD-3-Clause                                         https://github.com/encode/httpx
+idna                      3.11       BSD-3-Clause                                         https://github.com/kjd/idna
+iniconfig                 2.1.0      MIT                                                  https://github.com/pytest-dev/iniconfig
+Mako                      1.3.10     MIT License                                          https://www.makotemplates.org/
+MarkupSafe                3.0.3      BSD-3-Clause                                         https://github.com/pallets/markupsafe/
+numpy                     1.26.4     BSD License                                          https://numpy.org
+packaging                 26.0       Apache-2.0 OR BSD-2-Clause                           https://github.com/pypa/packaging
+pluggy                    1.6.0      MIT License                                          UNKNOWN
+psycopg2-binary           2.9.9      GNU Library or Lesser General Public License (LGPL)  https://psycopg.org/
+pyarrow                   15.0.2     Apache Software License                              https://arrow.apache.org/
+pycparser                 2.23       BSD License                                          https://github.com/eliben/pycparser
+pydantic                  2.12.5     MIT                                                  https://github.com/pydantic/pydantic
+pydantic-settings         2.1.0      MIT                                                  https://github.com/pydantic/pydantic-settings
+pydantic_core             2.41.5     MIT                                                  https://github.com/pydantic/pydantic-core
+Pygments                  2.20.0     BSD-2-Clause                                         https://pygments.org
+PyMySQL                   1.1.0      MIT License                                          https://pymysql.readthedocs.io/
+pytest                    8.3.5      MIT License                                          https://docs.pytest.org/en/latest/
+pytest-asyncio            1.2.0      Apache-2.0                                           https://github.com/pytest-dev/pytest-asyncio
+python-dotenv             1.0.0      BSD License                                          https://github.com/theskumar/python-dotenv
+PyYAML                    6.0.3      MIT License                                          https://pyyaml.org/
+sniffio                   1.3.1      Apache Software License; MIT License                 https://github.com/python-trio/sniffio
+SQLAlchemy                2.0.25     MIT License                                          https://www.sqlalchemy.org
+starlette                 0.35.1     BSD-3-Clause                                         https://github.com/encode/starlette
+typing-inspection         0.4.2      MIT                                                  https://github.com/pydantic/typing-inspection
+typing_extensions         4.15.0     PSF-2.0                                              https://github.com/python/typing_extensions
+uvicorn                   0.27.0     BSD-3-Clause                                         https://www.uvicorn.org/
+uvloop                    0.22.1     Apache Software License; MIT License                 UNKNOWN
+watchfiles                1.1.1      MIT License                                          https://github.com/samuelcolvin/watchfiles
+websockets                15.0.1     BSD License                                          https://github.com/python-websockets/websockets
+
+--------------------------------------------------------------------
+Frontend (npm, production bundle)
+--------------------------------------------------------------------
+
+Package                                            Version  License       Project
+---------------------------------------------------------------------------------
+@babel/runtime                                     7.29.2   MIT           https://github.com/babel/babel
+@remix-run/router                                  1.23.2   MIT           https://github.com/remix-run/react-router
+@tanstack/query-core                               5.99.2   MIT           https://github.com/TanStack/query
+@tanstack/react-query                              5.99.2   MIT           https://github.com/TanStack/query
+@types/d3-array                                    3.2.2    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/d3-color                                    3.1.3    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/d3-ease                                     3.0.2    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/d3-interpolate                              3.0.4    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/d3-path                                     3.1.1    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/d3-scale                                    4.0.9    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/d3-shape                                    3.1.8    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/d3-time                                     3.0.4    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/d3-timer                                    3.0.2    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/debug                                       4.1.13   MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/estree                                      1.0.8    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/estree-jsx                                  1.0.5    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/hast                                        3.0.5    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/mdast                                       4.0.4    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/ms                                          2.1.0    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/prop-types                                  15.7.15  MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/react                                       18.3.28  MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/unist                                       2.0.11   MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@types/unist                                       3.0.3    MIT           https://github.com/DefinitelyTyped/DefinitelyTyped
+@ungap/structured-clone                            1.3.3    ISC           https://github.com/ungap/structured-clone
+asynckit                                           0.4.0    MIT           https://github.com/alexindigo/asynckit
+axios                                              1.15.1   MIT           https://github.com/axios/axios
+bail                                               2.0.2    MIT           https://github.com/wooorm/bail
+call-bind-apply-helpers                            1.0.2    MIT           https://github.com/ljharb/call-bind-apply-helpers
+ccount                                             2.0.1    MIT           https://github.com/wooorm/ccount
+character-entities                                 2.0.2    MIT           https://github.com/wooorm/character-entities
+character-entities-html4                           2.1.0    MIT           https://github.com/wooorm/character-entities-html4
+character-entities-legacy                          3.0.0    MIT           https://github.com/wooorm/character-entities-legacy
+character-reference-invalid                        2.0.1    MIT           https://github.com/wooorm/character-reference-invalid
+clsx                                               2.1.1    MIT           https://github.com/lukeed/clsx
+combined-stream                                    1.0.8    MIT           https://github.com/felixge/node-combined-stream
+comma-separated-tokens                             2.0.3    MIT           https://github.com/wooorm/comma-separated-tokens
+csstype                                            3.2.3    MIT           https://github.com/frenic/csstype
+d3-array                                           3.2.4    ISC           https://github.com/d3/d3-array
+d3-color                                           3.1.0    ISC           https://github.com/d3/d3-color
+d3-ease                                            3.0.1    BSD-3-Clause  https://github.com/d3/d3-ease
+d3-format                                          3.1.2    ISC           https://github.com/d3/d3-format
+d3-interpolate                                     3.0.1    ISC           https://github.com/d3/d3-interpolate
+d3-path                                            3.1.0    ISC           https://github.com/d3/d3-path
+d3-scale                                           4.0.2    ISC           https://github.com/d3/d3-scale
+d3-shape                                           3.2.0    ISC           https://github.com/d3/d3-shape
+d3-time                                            3.1.0    ISC           https://github.com/d3/d3-time
+d3-time-format                                     4.1.0    ISC           https://github.com/d3/d3-time-format
+d3-timer                                           3.0.1    ISC           https://github.com/d3/d3-timer
+debug                                              4.4.3    MIT           https://github.com/debug-js/debug
+decimal.js-light                                   2.5.1    MIT           https://github.com/MikeMcl/decimal.js-light
+decode-named-character-reference                   1.3.0    MIT           https://github.com/wooorm/decode-named-character-reference
+delayed-stream                                     1.0.0    MIT           https://github.com/felixge/node-delayed-stream
+dequal                                             2.0.3    MIT           https://github.com/lukeed/dequal
+devlop                                             1.1.0    MIT           https://github.com/wooorm/devlop
+dom-helpers                                        5.2.1    MIT           https://github.com/react-bootstrap/dom-helpers
+dunder-proto                                       1.0.1    MIT           https://github.com/es-shims/dunder-proto
+es-define-property                                 1.0.1    MIT           https://github.com/ljharb/es-define-property
+es-errors                                          1.3.0    MIT           https://github.com/ljharb/es-errors
+es-object-atoms                                    1.1.1    MIT           https://github.com/ljharb/es-object-atoms
+es-set-tostringtag                                 2.1.0    MIT           https://github.com/es-shims/es-set-tostringtag
+escape-string-regexp                               5.0.0    MIT           https://github.com/sindresorhus/escape-string-regexp
+estree-util-is-identifier-name                     3.0.0    MIT           https://github.com/syntax-tree/estree-util-is-identifier-name
+eventemitter3                                      4.0.7    MIT           https://github.com/primus/eventemitter3
+extend                                             3.0.2    MIT           https://github.com/justmoon/node-extend
+fast-equals                                        5.4.0    MIT           https://github.com/planttheidea/fast-equals
+follow-redirects                                   1.16.0   MIT           https://github.com/follow-redirects/follow-redirects
+form-data                                          4.0.5    MIT           https://github.com/form-data/form-data
+function-bind                                      1.1.2    MIT           https://github.com/Raynos/function-bind
+get-intrinsic                                      1.3.0    MIT           https://github.com/ljharb/get-intrinsic
+get-proto                                          1.0.1    MIT           https://github.com/ljharb/get-proto
+gopd                                               1.2.0    MIT           https://github.com/ljharb/gopd
+has-symbols                                        1.1.0    MIT           https://github.com/inspect-js/has-symbols
+has-tostringtag                                    1.0.2    MIT           https://github.com/inspect-js/has-tostringtag
+hasown                                             2.0.3    MIT           https://github.com/inspect-js/hasOwn
+hast-util-to-jsx-runtime                           2.3.6    MIT           https://github.com/syntax-tree/hast-util-to-jsx-runtime
+hast-util-whitespace                               3.0.0    MIT           https://github.com/syntax-tree/hast-util-whitespace
+html-url-attributes                                3.0.1    MIT           https://github.com/rehypejs/rehype-minify/tree/main/packages/html-url-attributes
+inline-style-parser                                0.2.7    MIT           https://github.com/remarkablemark/inline-style-parser
+internmap                                          2.0.3    ISC           https://github.com/mbostock/internmap
+is-alphabetical                                    2.0.1    MIT           https://github.com/wooorm/is-alphabetical
+is-alphanumerical                                  2.0.1    MIT           https://github.com/wooorm/is-alphanumerical
+is-decimal                                         2.0.1    MIT           https://github.com/wooorm/is-decimal
+is-hexadecimal                                     2.0.1    MIT           https://github.com/wooorm/is-hexadecimal
+is-plain-obj                                       4.1.0    MIT           https://github.com/sindresorhus/is-plain-obj
+js-tokens                                          4.0.0    MIT           https://github.com/lydell/js-tokens
+lodash                                             4.18.1   MIT           https://github.com/lodash/lodash
+longest-streak                                     3.1.0    MIT           https://github.com/wooorm/longest-streak
+loose-envify                                       1.4.0    MIT           https://github.com/zertosh/loose-envify
+lucide-react                                       0.330.0  ISC           https://github.com/lucide-icons/lucide
+markdown-table                                     3.0.4    MIT           https://github.com/wooorm/markdown-table
+math-intrinsics                                    1.1.0    MIT           https://github.com/es-shims/math-intrinsics
+mdast-util-find-and-replace                        3.0.2    MIT           https://github.com/syntax-tree/mdast-util-find-and-replace
+mdast-util-from-markdown                           2.0.3    MIT           https://github.com/syntax-tree/mdast-util-from-markdown
+mdast-util-gfm                                     3.1.0    MIT           https://github.com/syntax-tree/mdast-util-gfm
+mdast-util-gfm-autolink-literal                    2.0.1    MIT           https://github.com/syntax-tree/mdast-util-gfm-autolink-literal
+mdast-util-gfm-footnote                            2.1.0    MIT           https://github.com/syntax-tree/mdast-util-gfm-footnote
+mdast-util-gfm-strikethrough                       2.0.0    MIT           https://github.com/syntax-tree/mdast-util-gfm-strikethrough
+mdast-util-gfm-table                               2.0.0    MIT           https://github.com/syntax-tree/mdast-util-gfm-table
+mdast-util-gfm-task-list-item                      2.0.0    MIT           https://github.com/syntax-tree/mdast-util-gfm-task-list-item
+mdast-util-mdx-expression                          2.0.1    MIT           https://github.com/syntax-tree/mdast-util-mdx-expression
+mdast-util-mdx-jsx                                 3.2.0    MIT           https://github.com/syntax-tree/mdast-util-mdx-jsx
+mdast-util-mdxjs-esm                               2.0.1    MIT           https://github.com/syntax-tree/mdast-util-mdxjs-esm
+mdast-util-phrasing                                4.1.0    MIT           https://github.com/syntax-tree/mdast-util-phrasing
+mdast-util-to-hast                                 13.2.1   MIT           https://github.com/syntax-tree/mdast-util-to-hast
+mdast-util-to-markdown                             2.1.2    MIT           https://github.com/syntax-tree/mdast-util-to-markdown
+mdast-util-to-string                               4.0.0    MIT           https://github.com/syntax-tree/mdast-util-to-string
+micromark                                          4.0.2    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark
+micromark-core-commonmark                          2.0.3    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-core-commonmark
+micromark-extension-gfm                            3.0.0    MIT           https://github.com/micromark/micromark-extension-gfm
+micromark-extension-gfm-autolink-literal           2.1.0    MIT           https://github.com/micromark/micromark-extension-gfm-autolink-literal
+micromark-extension-gfm-footnote                   2.1.0    MIT           https://github.com/micromark/micromark-extension-gfm-footnote
+micromark-extension-gfm-strikethrough              2.1.0    MIT           https://github.com/micromark/micromark-extension-gfm-strikethrough
+micromark-extension-gfm-table                      2.1.1    MIT           https://github.com/micromark/micromark-extension-gfm-table
+micromark-extension-gfm-tagfilter                  2.0.0    MIT           https://github.com/micromark/micromark-extension-gfm-tagfilter
+micromark-extension-gfm-task-list-item             2.1.0    MIT           https://github.com/micromark/micromark-extension-gfm-task-list-item
+micromark-factory-destination                      2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-factory-destination
+micromark-factory-label                            2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-factory-label
+micromark-factory-space                            2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-factory-space
+micromark-factory-title                            2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-factory-title
+micromark-factory-whitespace                       2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-factory-whitespace
+micromark-util-character                           2.1.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-character
+micromark-util-chunked                             2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-chunked
+micromark-util-classify-character                  2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-classify-character
+micromark-util-combine-extensions                  2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-combine-extensions
+micromark-util-decode-numeric-character-reference  2.0.2    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-decode-numeric-character-reference
+micromark-util-decode-string                       2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-decode-string
+micromark-util-encode                              2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-encode
+micromark-util-html-tag-name                       2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-html-tag-name
+micromark-util-normalize-identifier                2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-normalize-identifier
+micromark-util-resolve-all                         2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-resolve-all
+micromark-util-sanitize-uri                        2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-sanitize-uri
+micromark-util-subtokenize                         2.1.0    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-subtokenize
+micromark-util-symbol                              2.0.1    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-symbol
+micromark-util-types                               2.0.2    MIT           https://github.com/micromark/micromark/tree/main/packages/micromark-util-types
+mime-db                                            1.52.0   MIT           https://github.com/jshttp/mime-db
+mime-types                                         2.1.35   MIT           https://github.com/jshttp/mime-types
+ms                                                 2.1.3    MIT           https://github.com/vercel/ms
+object-assign                                      4.1.1    MIT           https://github.com/sindresorhus/object-assign
+parse-entities                                     4.0.2    MIT           https://github.com/wooorm/parse-entities
+prop-types                                         15.8.1   MIT           https://github.com/facebook/prop-types
+property-information                               7.2.0    MIT           https://github.com/wooorm/property-information
+proxy-from-env                                     2.1.0    MIT           https://github.com/Rob--W/proxy-from-env
+react                                              18.3.1   MIT           https://github.com/facebook/react
+react-dom                                          18.3.1   MIT           https://github.com/facebook/react
+react-is                                           16.13.1  MIT           https://github.com/facebook/react
+react-is                                           18.3.1   MIT           https://github.com/facebook/react
+react-markdown                                     10.1.0   MIT           https://github.com/remarkjs/react-markdown
+react-router                                       6.30.3   MIT           https://github.com/remix-run/react-router
+react-router-dom                                   6.30.3   MIT           https://github.com/remix-run/react-router
+react-smooth                                       4.0.4    MIT           https://github.com/recharts/react-smooth
+react-transition-group                             4.4.5    BSD-3-Clause  https://github.com/reactjs/react-transition-group
+recharts                                           2.15.4   MIT           https://github.com/recharts/recharts
+recharts-scale                                     0.4.5    MIT           https://github.com/recharts/recharts-scale
+remark-gfm                                         4.0.1    MIT           https://github.com/remarkjs/remark-gfm
+remark-parse                                       11.0.0   MIT           https://github.com/remarkjs/remark/tree/main/packages/remark-parse
+remark-rehype                                      11.1.2   MIT           https://github.com/remarkjs/remark-rehype
+remark-stringify                                   11.0.0   MIT           https://github.com/remarkjs/remark/tree/main/packages/remark-stringify
+scheduler                                          0.23.2   MIT           https://github.com/facebook/react
+space-separated-tokens                             2.0.2    MIT           https://github.com/wooorm/space-separated-tokens
+stringify-entities                                 4.0.4    MIT           https://github.com/wooorm/stringify-entities
+style-to-js                                        1.1.21   MIT           https://github.com/remarkablemark/style-to-js
+style-to-object                                    1.0.14   MIT           https://github.com/remarkablemark/style-to-object
+tiny-invariant                                     1.3.3    MIT           https://github.com/alexreardon/tiny-invariant
+trim-lines                                         3.0.1    MIT           https://github.com/wooorm/trim-lines
+trough                                             2.2.0    MIT           https://github.com/wooorm/trough
+unified                                            11.0.5   MIT           https://github.com/unifiedjs/unified
+unist-util-is                                      6.0.1    MIT           https://github.com/syntax-tree/unist-util-is
+unist-util-position                                5.0.0    MIT           https://github.com/syntax-tree/unist-util-position
+unist-util-stringify-position                      4.0.0    MIT           https://github.com/syntax-tree/unist-util-stringify-position
+unist-util-visit                                   5.1.0    MIT           https://github.com/syntax-tree/unist-util-visit
+unist-util-visit-parents                           6.0.2    MIT           https://github.com/syntax-tree/unist-util-visit-parents
+vfile                                              6.0.3    MIT           https://github.com/vfile/vfile
+vfile-message                                      4.0.3    MIT           https://github.com/vfile/vfile-message
+victory-vendor                                     36.9.2   MIT AND ISC   https://github.com/FormidableLabs/victory
+zwitch                                             2.0.4    MIT           https://github.com/wooorm/zwitch

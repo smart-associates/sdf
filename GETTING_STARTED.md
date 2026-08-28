@@ -354,6 +354,13 @@ You can add additional custom settings via the Settings page or the `/api/settin
 
 ## Publishing a new release (maintainers only)
 
+Before publishing, regenerate the third-party licence notices so they match the dependencies actually being shipped:
+
+```bash
+./scripts/gen-third-party-notices.sh
+git diff THIRD_PARTY_NOTICES.txt   # review, then commit if it changed
+```
+
 The Docker image is pushed to Docker Hub as multi-arch (`linux/amd64` + `linux/arm64`) via a local script. Prerequisites: `docker login` with push access to the `smartassociates` namespace, and `docker buildx` available (bundled with Docker Desktop; on plain Linux run `docker run --rm --privileged tonistiigi/binfmt --install all` once to enable cross-builds).
 
 ```bash
