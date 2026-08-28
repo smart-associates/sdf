@@ -1,0 +1,68 @@
+NOTICE
+
+Smart Data Frameworks (SDF), Community edition
+Copyright (c) 2026 Smart Associates Limited. All rights reserved.
+
+This NOTICE accompanies the LICENSE file and provides information about how
+the Community edition of the Software is licensed and distributed. Where this
+NOTICE and the LICENSE file differ, the LICENSE file governs.
+
+1. Licence
+   The Community edition is provided under the Business Source License 1.1
+   (BSL 1.1). The full licence text and its parameters are in the LICENSE
+   file. Non-production use is permitted free of charge. Production use is
+   permitted only within the scope of the Additional Use Grant stated in the
+   LICENSE file. On the Change Date for each version, that version becomes
+   available under the Apache License, Version 2.0.
+
+2. No warranty
+   As stated in the LICENSE file, the Software is provided on an "AS IS"
+   basis, without warranties or conditions of any kind, express or implied,
+   to the extent permitted by applicable law.
+
+3. No support
+   The Community edition is provided without support from Smart Associates.
+   Assistance is available through public documentation and community channels
+   only. Smart Associates makes no commitment to response times for Community
+   edition enquiries.
+
+4. Trademarks
+   BSL 1.1 grants no rights in any Smart Associates trademark or logo.
+   "Smart Associates", "Smart Data Frameworks", "SDF" and the Smart Associates
+   logo remain the property of Smart Associates Limited. You may refer to the
+   Software by name. You may not use these marks to brand a modified or
+   derivative distribution without prior written permission.
+
+5. Data and privacy
+   The Software is self-hosted and runs entirely within your own
+   infrastructure. It performs no licence call-back and transmits no
+   operational data, configuration data or usage telemetry to Smart Associates
+   in the course of operation. Smart Associates receives only the aggregate
+   distribution statistics that GitHub and Docker Hub make available to any
+   project maintainer, for example repository traffic figures and image pull
+   counts. Obtaining the Software from those platforms is subject to their own
+   privacy terms, over which Smart Associates has no control.
+
+6. Third-party components
+   The Software includes third-party open source components, each governed by
+   its own licence. A complete list of those components and their licences is
+   set out below.
+
+   [TO BE COMPLETED FROM THE BUILD SBOM BEFORE PUBLICATION. This file must not
+   ship with this section left as a placeholder. Owner: Adam / Shaneel.]
+
+7. Export
+   You are responsible for ensuring that your use, export or re-export of the
+   Software complies with all applicable export control and trade sanctions
+   laws.
+
+8. Consumers and governing law
+   Smart Associates Limited is a company incorporated in England and Wales
+   (company number 04804996), registered office Valley View, The Old Quarry,
+   Haslemere, Surrey, GU27 3SS. Smart Associates' position is that the licence
+   and these notices are governed by the law of England and Wales. If you
+   obtain the Software as a consumer, this statement does not remove any rights
+   you have under the mandatory law of your country of residence that cannot be
+   excluded by agreement.
+
+Contact: licensing@smart-associates.biz
