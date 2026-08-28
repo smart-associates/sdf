@@ -3,7 +3,7 @@ import client from './client'
 export interface DatabaseConnection {
   id: number
   name: string
-  db_type: 'postgresql' | 'mysql' | 'mssql' | 'filesystem'
+  db_type: 'postgresql' | 'mysql' | 'filesystem'
   host?: string
   port?: number
   database: string  // for filesystem: directory path

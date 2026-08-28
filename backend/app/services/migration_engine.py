@@ -29,9 +29,8 @@ def _log_sql(elog, exec_table_id, kind: str, summary: str, sql: str, **extra):
 _DRIVERS = {
     "postgresql": "postgresql+psycopg2",
     "mysql": "mysql+pymysql",
-    "mssql": "mssql+pymssql",
 }
-_DEFAULT_PORTS = {"postgresql": 5432, "mysql": 3306, "mssql": 1433}
+_DEFAULT_PORTS = {"postgresql": 5432, "mysql": 3306}
 
 # Forbidden character sequences in user-supplied WHERE clauses
 _FILTER_FORBIDDEN_CHARS = [";", "--", "/*", "*/"]
@@ -65,7 +64,7 @@ _FILTER_SAFE_FUNCTIONS = frozenset({
 # Safe unquoted identifier patterns per dialect family.
 # PostgreSQL folds unquoted names to lowercase, so any uppercase signals the name
 # was originally quoted at source and must remain quoted on the target.
-# MySQL/MSSQL are case-insensitive, so mixed case alone does not require quoting.
+# MySQL is case-insensitive, so mixed case alone does not require quoting.
 _SAFE_IDENT_PG = re.compile(r'^[a-z_][a-z0-9_]*$')
 _SAFE_IDENT_CI = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 
@@ -86,7 +85,7 @@ def _quote_ident(name: str, dialect: str = "postgresql") -> str:
         if _SAFE_IDENT_CI.match(name):
             return name
         return "`" + name.replace("`", "``") + "`"
-    # mssql and others
+    # other dialects
     if _SAFE_IDENT_CI.match(name):
         return name
     return '"' + name.replace('"', '""') + '"'
@@ -205,12 +204,10 @@ def _connect_timeout_args(db_type: str) -> dict:
     """Return driver-specific connect timeout args (10s) for the initial connection.
 
     Without these, driver defaults on an unreachable host are painful:
-    pymssql ~60s, psycopg2 ~120s, pymysql effectively infinite.
+    psycopg2 ~120s, pymysql effectively infinite.
     """
     if db_type in ("postgresql", "mysql"):
         return {"connect_timeout": 10}
-    if db_type == "mssql":
-        return {"login_timeout": 10}
     return {}
 
 
@@ -283,7 +280,6 @@ def get_estimated_row_count(
     Uses dialect-specific catalog tables:
       - PostgreSQL: pg_class.reltuples (updated by ANALYZE/autovacuum)
       - MySQL:      information_schema.TABLES.TABLE_ROWS
-      - MSSQL:      sys.partitions
 
     Returns None if the estimate is unavailable or an error occurs.
     """
@@ -326,18 +322,6 @@ def get_estimated_row_count(
                         """),
                         {"table": table},
                     ).fetchone()
-                if row is not None and row[0] is not None:
-                    return int(row[0])
-
-            elif dialect == "mssql":
-                row = conn.execute(
-                    text("""
-                        SELECT SUM(p.rows) FROM sys.partitions p
-                        JOIN sys.objects o ON o.object_id = p.object_id
-                        WHERE o.name = :table AND p.index_id IN (0, 1)
-                    """),
-                    {"table": table},
-                ).fetchone()
                 if row is not None and row[0] is not None:
                     return int(row[0])
     except Exception as exc:
@@ -444,7 +428,7 @@ def create_target_table(src_engine: Engine, tgt_engine: Engine,
             continue
         # Always derive the name from the target table rather than reusing the
         # source's own index name verbatim: index names live in a per-schema
-        # (not per-table) namespace in Postgres/MSSQL, so reusing the source's
+        # (not per-table) namespace in Postgres, so reusing the source's
         # name collides whenever source and target share a schema.
         name = f"ix_{tgt_table}_{'_'.join(col_names)}"[:63]
         if name in seen_index_names:

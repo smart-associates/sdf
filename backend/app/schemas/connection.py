@@ -12,11 +12,11 @@ class DatabaseConnectionBase(BaseModel):
     staging_format: Optional[str] = None  # csv|tsv|parquet|avro (filesystem connections only)
 
 class DatabaseConnectionCreate(DatabaseConnectionBase):
-    db_type: Literal["postgresql", "mysql", "mssql", "filesystem"]
+    db_type: Literal["postgresql", "mysql", "filesystem"]
     password: Optional[str] = None
 
 class DatabaseConnectionUpdate(DatabaseConnectionBase):
-    db_type: Literal["postgresql", "mysql", "mssql", "filesystem"]
+    db_type: Literal["postgresql", "mysql", "filesystem"]
     password: Optional[str] = None
 
 class DatabaseConnectionResponse(DatabaseConnectionBase):

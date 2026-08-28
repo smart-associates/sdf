@@ -4,7 +4,7 @@ A web-based data migration tool for moving data between databases and file forma
 
 ## Features
 
-- **Multi-source support** — PostgreSQL, MySQL, MSSQL, and filesystem connections (CSV, Parquet, Avro)
+- **Multi-source support** — PostgreSQL, MySQL, and filesystem connections (CSV, Parquet, Avro)
 - **Reusable jobs** — configure source tables, target destination, filters, and migration mode once; run repeatedly
 - **Progress tracking** — per-table row counts, estimated progress bars, execution timestamps
 - **Execution history** — full log of all runs with status and error details
@@ -170,7 +170,6 @@ Interactive API docs are available at [http://localhost:8000/docs](http://localh
 |------|---------|--------|--------|-------|
 | PostgreSQL | `postgresql` | Yes | Yes | |
 | MySQL | `mysql` | Yes | Yes | |
-| MSSQL | `mssql` | Yes | Yes | |
 | Filesystem | `filesystem` | Yes | Yes | Set `staging_format` to `csv`, `parquet`, or `avro`; `database` is the directory path |
 
 ## Migration Modes

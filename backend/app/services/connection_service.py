@@ -13,22 +13,19 @@ from app.services.clone_utils import next_copy_name
 
 TEST_TIMEOUT = 15  # seconds — overall safety net for connection tests
 
-DEFAULT_PORTS = {"postgresql": 5432, "mysql": 3306, "mssql": 1433}
+DEFAULT_PORTS = {"postgresql": 5432, "mysql": 3306}
 _DRIVERS = {
     "postgresql": "postgresql+psycopg2",
     "mysql": "mysql+pymysql",
-    "mssql": "mssql+pymssql",
 }
 
 
 def _connect_timeout_args(db_type: str) -> dict:
     """Driver-specific connect timeout args (10s) so an unreachable host fails
-    fast instead of hanging on driver defaults (pymssql ~60s, psycopg2 ~120s,
-    pymysql effectively infinite)."""
+    fast instead of hanging on driver defaults (psycopg2 ~120s, pymysql
+    effectively infinite)."""
     if db_type in ("postgresql", "mysql"):
         return {"connect_timeout": 10}
-    if db_type == "mssql":
-        return {"login_timeout": 10}
     return {}
 
 

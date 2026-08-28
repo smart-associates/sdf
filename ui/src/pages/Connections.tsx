@@ -21,8 +21,8 @@ import { VENDOR_LABEL } from '../components/VendorIcon'
 type ViewMode = 'card' | 'list'
 const VIEW_MODE_KEY = 'connections:view'
 
-const DB_TYPES = ['postgresql', 'mysql', 'mssql', 'filesystem'] as const
-const DEFAULT_PORTS: Record<string, number> = { postgresql: 5432, mysql: 3306, mssql: 1433 }
+const DB_TYPES = ['postgresql', 'mysql', 'filesystem'] as const
+const DEFAULT_PORTS: Record<string, number> = { postgresql: 5432, mysql: 3306 }
 
 function empty(): Partial<DatabaseConnection> {
   return { name: '', db_type: 'postgresql', host: '', port: 5432, database: '', username: '', password: '' }

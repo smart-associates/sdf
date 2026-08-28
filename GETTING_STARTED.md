@@ -229,7 +229,7 @@ Navigate to **Connections** → **Add Connection**.
 
 Fill in:
 - **Name** — a label for this connection (e.g. "Production Postgres")
-- **Type** — `postgresql`, `mysql`, `mssql`, or `filesystem`
+- **Type** — `postgresql`, `mysql`, or `filesystem`
 - **Host / Port / Database / Username / Password** — your DB credentials
 
 Click **Test** to verify the connection before saving.

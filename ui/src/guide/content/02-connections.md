@@ -6,8 +6,7 @@ connection can be used as a source in one job and a target in another.
 
 ## Supported types
 
-- **PostgreSQL**, **MySQL**, **MSSQL** — host, port, database, username,
-  and password.
+- **PostgreSQL**, **MySQL** — host, port, database, username, and password.
 - **Filesystem** — a local directory path instead of host/port. Each table
   maps to one file: `<directory>/<table>.<format>`, where format is
   Parquet, CSV, TSV, or Avro (set per connection).
