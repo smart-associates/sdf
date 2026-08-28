@@ -89,6 +89,19 @@ Work on this repo is tracked as GitHub issues on `smart-associates/sdf`, which d
 - **Close the issue from the commit** by including `Closes #N` in the commit message. Closing the issue moves its roadmap card to Done.
 - Applies to substantive work, not trivial one-off fixes — use judgement.
 
+### Git hooks
+
+Run this once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+This enables a pre-commit hook that stamps the BSL 1.1 `Change Date` in `LICENSE`
+with (commit date + 4 years) on every commit — required because each commit to
+this public repo is a "publicly available distribution" of that snapshot under
+the license.
+
 ### Branching
 
 - Branch from `main`.

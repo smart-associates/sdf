@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Stamps the BSL 1.1 Change Date in LICENSE with (commit date + 4 years)
+# before every commit. The repo is public, so each commit is a "publicly
+# available distribution" of that snapshot under BSL 1.1, which requires
+# the Change Date to be recorded in the Licence File accompanying it.
+#
+# Install once per clone:
+#   git config core.hooksPath .githooks
+#
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+[ -f LICENSE ] || exit 0
+
+CHANGE_DATE="$(date -d '+4 years' +%Y-%m-%d 2>/dev/null || date -v+4y +%Y-%m-%d)"
+
+python3 - "$CHANGE_DATE" <<'EOF'
+import re
+import sys
+
+change_date = sys.argv[1]
+with open("LICENSE") as f:
+    text = f.read()
+
+new_text = re.sub(
+    r"Change Date:          \d{4}-\d{2}-\d{2} \(four years from this version's first\n"
+    r"                      publicly available distribution\)\.",
+    f"Change Date:          {change_date} (four years from this version's first\n"
+    "                      publicly available distribution).",
+    text,
+)
+
+if new_text != text:
+    with open("LICENSE", "w") as f:
+        f.write(new_text)
+EOF
+
+git add LICENSE
