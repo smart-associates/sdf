@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 #
-# Build and publish smartassociates/sdf to Docker Hub as a multi-arch image.
+# Build and publish ghcr.io/smart-associates/sdf to GitHub Container Registry
+# as a multi-arch image.
 #
 # Usage:
 #   scripts/publish.sh              # tags :latest and :<git-sha>
 #   scripts/publish.sh 1.2.0        # additionally tags :1.2.0
 #
 # Prerequisites:
-#   * docker login        (credentials for smartassociates namespace)
+#   * docker login ghcr.io (credentials for the smart-associates org, e.g. a
+#     PAT with write:packages)
 #   * docker buildx       (bundled with recent Docker Desktop / docker-buildx-plugin)
 #   * QEMU for cross-build (auto-installed by Docker Desktop; on Linux:
 #     `docker run --rm --privileged tonistiigi/binfmt --install all`)
 #
 set -euo pipefail
 
-REPO="smartassociates/sdf"
+REPO="ghcr.io/smart-associates/sdf"
 VERSION="${1:-}"
 BUILDER="sdf-builder"
 
@@ -27,9 +29,9 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "warning: working tree is dirty; git sha tag will be ${GIT_SHA}${DIRTY}" >&2
 fi
 
-# Confirm Docker Hub login (config stores "auths" entries post-login).
-if ! grep -q '"https://index.docker.io/v1/"' "${DOCKER_CONFIG:-$HOME/.docker}/config.json" 2>/dev/null; then
-  echo "error: not logged into Docker Hub. Run 'docker login' first." >&2
+# Confirm GHCR login (config stores "auths" entries post-login).
+if ! grep -q '"ghcr.io"' "${DOCKER_CONFIG:-$HOME/.docker}/config.json" 2>/dev/null; then
+  echo "error: not logged into ghcr.io. Run 'docker login ghcr.io' first." >&2
   exit 1
 fi
 

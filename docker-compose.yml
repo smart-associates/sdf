@@ -1,6 +1,6 @@
 services:
   sdf:
-    image: smartassociates/sdf:${SDF_IMAGE_TAG:-latest}
+    image: ghcr.io/smart-associates/sdf:${SDF_IMAGE_TAG:-latest}
     # `build:` is kept so developers can `docker compose up --build` from source.
     # End users without the source tree can just `docker compose pull && docker compose up`.
     build: .
@@ -12,6 +12,14 @@ services:
     # requires enabling "Host networking" in Settings → Resources → Network.
     network_mode: host
     restart: unless-stopped
+    # To use a `filesystem` connection against an on-prem/NFS location (e.g.
+    # for local staging ahead of a cloud upload — see the "Local Staging
+    # Connection" option on a job's Bulk Staging settings), mount the export
+    # in and point the connection's directory at the mounted path. Docker
+    # doesn't need to know the underlying mount is NFS; the host just needs
+    # it mounted first (e.g. via /etc/fstab or autofs):
+    # volumes:
+    #   - /mnt/nfs/warehouse:/data/warehouse
     logging:
       driver: local
       options:

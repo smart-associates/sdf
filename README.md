@@ -64,7 +64,7 @@ Pin a specific version: `SDF_IMAGE_TAG=1.2.0 docker compose up`.
 **Build locally, run via compose:**
 ```bash
 git clone git@github.com:smart-associates/sdf.git && cd sdf
-docker build -t smartassociates/sdf:latest .   # tag matches what compose expects
+docker build -t ghcr.io/smart-associates/sdf:latest .   # tag matches what compose expects
 docker compose up                              # no rebuild, no pull — uses the local image
 ```
 

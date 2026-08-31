@@ -14,7 +14,7 @@
 
 ## Option 1: Docker Compose
 
-The Docker build is a single unified image published at [`smartassociates/sdf`](https://hub.docker.com/r/smartassociates/sdf) on Docker Hub. The image bundles the built React frontend + FastAPI backend, serving both on port 8000. There is **no Postgres container** — at startup the container tries to connect to PostgreSQL on the host, and if it can't reach one, it falls back to an in-container SQLite database (ephemeral, no volume).
+The Docker build is a single unified image published at [`ghcr.io/smart-associates/sdf`](https://github.com/smart-associates/sdf/pkgs/container/sdf) on GitHub Container Registry. The image bundles the built React frontend + FastAPI backend, serving both on port 8000. There is **no Postgres container** — at startup the container tries to connect to PostgreSQL on the host, and if it can't reach one, it falls back to an in-container SQLite database (ephemeral, no volume).
 
 ```bash
 docker compose pull      # fetch the published image (skip if you want to build locally)
@@ -28,11 +28,11 @@ Or, as a one-shot build + run from source (devs):
 
 Or, to build and run as two explicit steps (useful for faster iteration — you can rebuild without restarting the stack, and inspect the image before it runs):
 ```bash
-docker build -t smartassociates/sdf:latest .   # tag matches the default in docker-compose.yml
+docker build -t ghcr.io/smart-associates/sdf:latest .   # tag matches the default in docker-compose.yml
 docker compose up                              # picks up the local image, no rebuild
 ```
 
-Since `pull_policy: missing` is set in the compose file, `docker compose up` will use the image you just built rather than trying to pull from Docker Hub.
+Since `pull_policy: missing` is set in the compose file, `docker compose up` will use the image you just built rather than trying to pull from GHCR.
 
 Open [http://localhost:8000](http://localhost:8000). API docs at [http://localhost:8000/docs](http://localhost:8000/docs).
 
@@ -80,7 +80,7 @@ Or run the published image without building anything:
 ```bash
 docker run --rm --network=host \
   -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
-  smartassociates/sdf:latest
+  ghcr.io/smart-associates/sdf:latest
 ```
 
 Flags explained:
@@ -93,7 +93,7 @@ To run detached with a healthcheck-visible name:
 ```bash
 docker run -d --name sdf --network=host \
   -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
-  smartassociates/sdf:latest
+  ghcr.io/smart-associates/sdf:latest
 
 docker logs -f sdf      # watch startup (entrypoint logs which DB it picked)
 docker stop sdf         # stop
@@ -101,14 +101,14 @@ docker stop sdf         # stop
 
 ### Pinning a version
 
-The compose file uses `image: smartassociates/sdf:${SDF_IMAGE_TAG:-latest}`. Pin a release by setting the env var:
+The compose file uses `image: ghcr.io/smart-associates/sdf:${SDF_IMAGE_TAG:-latest}`. Pin a release by setting the env var:
 
 ```bash
 SDF_IMAGE_TAG=0.1.0 docker compose up
 # or in a .env file: SDF_IMAGE_TAG=0.1.0
 ```
 
-Each published release is also tagged by its git sha (e.g. `smartassociates/sdf:abc1234`), so you can pin to an exact commit.
+Each published release is also tagged by its git sha (e.g. `ghcr.io/smart-associates/sdf:abc1234`), so you can pin to an exact commit.
 
 ### How the container finds PostgreSQL
 
@@ -361,7 +361,7 @@ Before publishing, regenerate the third-party licence notices so they match the 
 git diff THIRD_PARTY_NOTICES.txt   # review, then commit if it changed
 ```
 
-The Docker image is pushed to Docker Hub as multi-arch (`linux/amd64` + `linux/arm64`) via a local script. Prerequisites: `docker login` with push access to the `smartassociates` namespace, and `docker buildx` available (bundled with Docker Desktop; on plain Linux run `docker run --rm --privileged tonistiigi/binfmt --install all` once to enable cross-builds).
+The Docker image is pushed to GitHub Container Registry as multi-arch (`linux/amd64` + `linux/arm64`) via a local script. Prerequisites: `docker login ghcr.io` with push access to the `smart-associates` org, and `docker buildx` available (bundled with Docker Desktop; on plain Linux run `docker run --rm --privileged tonistiigi/binfmt --install all` once to enable cross-builds).
 
 ```bash
 # Tag the current commit as :latest and :<git-sha>:
@@ -374,7 +374,7 @@ The Docker image is pushed to Docker Hub as multi-arch (`linux/amd64` + `linux/a
 The script builds, pushes, and tags in one shot. Verify with:
 
 ```bash
-docker buildx imagetools inspect smartassociates/sdf:1.2.0
+docker buildx imagetools inspect ghcr.io/smart-associates/sdf:1.2.0
 ```
 
 If the working tree is dirty, the git-sha tag gets a `-dirty` suffix — useful for diagnosing "what exactly did I push" but a signal to clean up before a real release.
