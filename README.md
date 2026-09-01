@@ -37,7 +37,7 @@ A web-based data migration tool for moving data between databases and file forma
 
 ## Quick Start
 
-**Docker (recommended — pulls prebuilt image from Docker Hub):**
+**Docker (recommended — pulls prebuilt image from GHCR):**
 ```bash
 # Grab just the compose file; no clone needed.
 curl -fsSL https://raw.githubusercontent.com/smart-associates/sdf/main/docker-compose.yml -o docker-compose.yml
@@ -54,7 +54,7 @@ docker compose pull && docker compose up
 The compose file uses `network_mode: host`, so the container auto-detects PostgreSQL on the
 host's `127.0.0.1:5432`. If none is reachable it falls back to an in-container SQLite
 database (ephemeral — no persistence). Override via env vars (see
-[GETTING_STARTED.md](GETTING_STARTED.md#option-2-docker-compose)).
+[GETTING_STARTED.md](GETTING_STARTED.md#option-1b-docker-compose)).
 
 > **macOS/Windows:** enable host networking in Docker Desktop under
 > **Settings → Resources → Network**. Linux works out of the box.

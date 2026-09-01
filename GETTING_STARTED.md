@@ -12,16 +12,78 @@
 
 ---
 
-## Option 1: Docker Compose
+## Option 1: Docker
 
 The Docker build is a single unified image published at [`ghcr.io/smart-associates/sdf`](https://github.com/smart-associates/sdf/pkgs/container/sdf) on GitHub Container Registry. The image bundles the built React frontend + FastAPI backend, serving both on port 8000. There is **no Postgres container** — at startup the container tries to connect to PostgreSQL on the host, and if it can't reach one, it falls back to an in-container SQLite database (ephemeral, no volume).
 
+### Option 1a: Plain `docker pull` + `docker run` (simplest)
+
+No repo checkout and no compose file needed — just the two commands:
+
+```bash
+docker pull ghcr.io/smart-associates/sdf:latest
+docker run --rm --network=host \
+  -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
+  ghcr.io/smart-associates/sdf:latest
+```
+
+Flags explained:
+- `--network=host` — share the host's network namespace. Port 8000 is bound directly on the host (no `-p` needed) and the container can reach a host PostgreSQL on `127.0.0.1`. On Docker Desktop (macOS/Windows) this requires enabling host networking in **Settings → Resources → Network**.
+- `-e ENCRYPTION_KEY=...` — stable secret used to encrypt stored DB passwords. Keep it constant across runs or previously-saved credentials become unreadable.
+
+Pass any of the `POSTGRES_*` env vars (see table below) with additional `-e` flags to override detection, e.g. `-e POSTGRES_USER=shaneel -e POSTGRES_PASSWORD=...`.
+
+To run detached with a healthcheck-visible name:
+```bash
+docker run -d --name sdf --network=host \
+  -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
+  ghcr.io/smart-associates/sdf:latest
+
+docker logs -f sdf      # watch startup (entrypoint logs which DB it picked)
+docker stop sdf         # stop
+```
+
+Pin a specific release instead of `latest` by changing the tag on both commands, e.g. `ghcr.io/smart-associates/sdf:0.1.0`. Each published release is also tagged by its git sha (e.g. `ghcr.io/smart-associates/sdf:abc1234`), so you can pin to an exact commit.
+
+**Building from source instead of pulling** (requires a repo checkout): if you'd rather build the image yourself:
+
+```bash
+docker build -t sdf:local .
+```
+
+The build runs both stages — a Node 20 stage that compiles the React UI to static assets, and a Python 3.11-slim runtime stage that installs backend deps and copies the build output into `/app/ui_dist`. The first build takes a few minutes; subsequent builds reuse layer cache and finish in seconds if only source changed.
+
+Optional build args for labels / release metadata:
+```bash
+docker build \
+  --build-arg SDF_VERSION=1.2.0 \
+  --build-arg SDF_GIT_SHA="$(git rev-parse --short HEAD)" \
+  -t sdf:local .
+```
+
+Then run it the same way, substituting `sdf:local` for the image name:
+```bash
+docker run --rm --network=host \
+  -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
+  sdf:local
+```
+
+Open [http://localhost:8000](http://localhost:8000). API docs at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+### Option 1b: Docker Compose
+
+Compose needs `docker-compose.yml` on disk first — either clone the repo, or grab just that file:
+```bash
+curl -fsSL https://raw.githubusercontent.com/smart-associates/sdf/main/docker-compose.yml -o docker-compose.yml
+```
+
+Then:
 ```bash
 docker compose pull      # fetch the published image (skip if you want to build locally)
 docker compose up
 ```
 
-Or, as a one-shot build + run from source (devs):
+Or, as a one-shot build + run from source (devs, requires a repo checkout so `start.sh` and the `Dockerfile` are present):
 ```bash
 ./start.sh docker        # or: docker compose up --build
 ```
@@ -50,55 +112,6 @@ The `sdf` service is configured with Docker's `local` log driver and rotation (`
 docker compose logs -f sdf
 ```
 
-### Option 1b: Plain `docker build` + `docker run`
-
-If you'd rather not use Compose, the same workflow works with plain Docker commands.
-
-**Build the image locally:**
-```bash
-docker build -t sdf:local .
-```
-
-The build runs both stages — a Node 20 stage that compiles the React UI to static assets, and a Python 3.11-slim runtime stage that installs backend deps and copies the build output into `/app/ui_dist`. The first build takes a few minutes; subsequent builds reuse layer cache and finish in seconds if only source changed.
-
-Optional build args for labels / release metadata:
-```bash
-docker build \
-  --build-arg SDF_VERSION=1.2.0 \
-  --build-arg SDF_GIT_SHA="$(git rev-parse --short HEAD)" \
-  -t sdf:local .
-```
-
-**Run the image:**
-```bash
-docker run --rm --network=host \
-  -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
-  sdf:local
-```
-
-Or run the published image without building anything:
-```bash
-docker run --rm --network=host \
-  -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
-  ghcr.io/smart-associates/sdf:latest
-```
-
-Flags explained:
-- `--network=host` — share the host's network namespace. Port 8000 is bound directly on the host (no `-p` needed) and the container can reach a host PostgreSQL on `127.0.0.1`. On Docker Desktop (macOS/Windows) this requires enabling host networking in **Settings → Resources → Network**.
-- `-e ENCRYPTION_KEY=...` — stable secret used to encrypt stored DB passwords. Keep it constant across runs or previously-saved credentials become unreadable.
-
-Pass any of the `POSTGRES_*` env vars (see table below) with additional `-e` flags to override detection, e.g. `-e POSTGRES_USER=shaneel -e POSTGRES_PASSWORD=...`.
-
-To run detached with a healthcheck-visible name:
-```bash
-docker run -d --name sdf --network=host \
-  -e ENCRYPTION_KEY="your-stable-32-char-secret-string" \
-  ghcr.io/smart-associates/sdf:latest
-
-docker logs -f sdf      # watch startup (entrypoint logs which DB it picked)
-docker stop sdf         # stop
-```
-
 ### Pinning a version
 
 The compose file uses `image: ghcr.io/smart-associates/sdf:${SDF_IMAGE_TAG:-latest}`. Pin a release by setting the env var:
@@ -112,7 +125,7 @@ Each published release is also tagged by its git sha (e.g. `ghcr.io/smart-associ
 
 ### How the container finds PostgreSQL
 
-The compose file sets `network_mode: host`, so the container shares the host's network namespace. That means `127.0.0.1` inside the container is the host's loopback — the same interface a local Postgres is almost always bound to. No `extra_hosts`, no NAT layer, no `-p` flag.
+Both paths above run the container with host networking (`--network=host` for plain `docker run`, `network_mode: host` in the compose file), so the container shares the host's network namespace. That means `127.0.0.1` inside the container is the host's loopback — the same interface a local Postgres is almost always bound to. No `extra_hosts`, no NAT layer, no `-p` flag.
 
 On Docker Desktop (macOS/Windows), host networking is available but opt-in: **Settings → Resources → Network → Enable host networking**. On plain Linux it works out of the box.
 
@@ -138,13 +151,13 @@ Then `sudo systemctl reload postgresql`.
 
 If probe fails, the container uses `sqlite:////tmp/sdf.db` — fine for evaluation, but data is lost when the container exits. For persistent usage, fix the PG path above or pass `DATABASE_URL`.
 
-### A note on `network_mode: host`
+### A note on host networking
 
 With host networking the container binds port 8000 directly on the host (no `-p 8000:8000` needed or honored). That means:
 
 - The app is reachable on every interface the host has — loopback, LAN, public. Same practical reachability as a published port, but the host's firewall is the only gate (no docker iptables NAT rules).
 - If anything else on the host already owns `:8000`, the container fails to start.
-- You can't pin to a specific interface via compose; uvicorn binds `0.0.0.0`. For localhost-only, put a firewall rule in front.
+- You can't pin to a specific interface; uvicorn binds `0.0.0.0`. For localhost-only, put a firewall rule in front.
 
 ---
 
