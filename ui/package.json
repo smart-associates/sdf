@@ -13,15 +13,18 @@
   "dependencies": {
     "@tanstack/react-query": "^5.17.0",
     "axios": "^1.18.0",
+    "browserslist": "^4.28.9",
     "clsx": "^2.1.0",
     "form-data": "^4.0.6",
     "lucide-react": "^0.330.0",
+    "postcss-selector-parser": "^6.1.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.30.6",
     "recharts": "^2.10.3",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "undici": "^7.29.1"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.20",
@@ -30,14 +33,14 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
-    "@vitejs/plugin-react": "^4.2.1",
+    "@vitejs/plugin-react": "^6.1.1",
     "autoprefixer": "^10.4.17",
     "jsdom": "^29.0.2",
     "msw": "^2.13.2",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.2.2",
-    "vite": "^5.1.0",
-    "vitest": "^4.1.4"
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
   }
 }
