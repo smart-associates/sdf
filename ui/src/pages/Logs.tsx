@@ -6,6 +6,7 @@ import { getExecutions, getExecutionLogs, Execution, ExecutionTable, LogEntry } 
 import { getJobs } from '../api/jobs'
 import StatusBadge from '../components/StatusBadge'
 import SortableHeader from '../components/SortableHeader'
+import ExecutionProgressBar from '../components/ExecutionProgressBar'
 import { useSortableData } from '../hooks/useSortableData'
 
 function levelColor(level: string): string {
@@ -104,6 +105,7 @@ function ExecutionDetail({ execution: e }: { execution: Execution }) {
 
   return (
     <div className="space-y-3">
+      <ExecutionProgressBar execution={e} />
       <div className="flex items-center justify-end">
         <label className="text-[11px] text-gray-500 flex items-center gap-1 cursor-pointer">
           <input

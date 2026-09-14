@@ -11,6 +11,7 @@ import { downloadJson } from '../lib/download'
 import { getConnections } from '../api/connections'
 import { getExecution, stopExecution } from '../api/executions'
 import StatusBadge from '../components/StatusBadge'
+import ExecutionProgressBar from '../components/ExecutionProgressBar'
 import Modal from '../components/Modal'
 import SortableHeader from '../components/SortableHeader'
 import VendorIcon from '../components/VendorIcon'
@@ -567,6 +568,7 @@ export default function Jobs() {
                   </button>
                 )}
               </div>
+              <ExecutionProgressBar execution={execStatus} />
               {execStatus.error_message && (
                 <div className="p-2 bg-red-50 text-red-600 text-sm rounded">{execStatus.error_message}</div>
               )}
