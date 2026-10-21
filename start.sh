@@ -26,9 +26,8 @@ if [ -z "$DATABASE_URL" ] && ! grep -q '^DATABASE_URL=' backend/.env 2>/dev/null
     export DATABASE_URL="postgresql+asyncpg:///sdf?host=/var/run/postgresql"
     export SYNC_DATABASE_URL="postgresql+psycopg2:///sdf?host=/var/run/postgresql"
   else
-    echo "PostgreSQL not running — falling back to SQLite"
-    export DATABASE_URL="sqlite+aiosqlite:///./sdf.db"
-    export SYNC_DATABASE_URL="sqlite:///./sdf.db"
+    echo "ERROR: PostgreSQL is not running. Start PostgreSQL, or set DATABASE_URL (see GETTING_STARTED.md)."
+    exit 1
   fi
 fi
 

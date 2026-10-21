@@ -47,7 +47,7 @@ Tests live in `backend/tests/` and use **pytest** with **pytest-asyncio**.
 - **Service tests** (e.g. `test_connection_service.py`) — test service functions with a real async database session.
 - **API tests** (e.g. `test_settings_api.py`) — test HTTP endpoints via `httpx.AsyncClient`.
 
-Shared fixtures are in `conftest.py`. The test database is auto-detected the same way `start.sh` detects it: `.env` first, then `pg_isready`, then SQLite fallback.
+Shared fixtures are in `conftest.py`. The test database is auto-detected the same way `start.sh` detects it: `.env` first, then `pg_isready`; tests abort if neither finds PostgreSQL.
 
 ```bash
 cd backend && python -m pytest -v

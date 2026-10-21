@@ -3,10 +3,12 @@ import subprocess
 import shutil
 from pathlib import Path
 
+import pytest
+
 # Resolve database URL, mirroring start.sh logic:
 #   1. Check backend/.env for DATABASE_URL
 #   2. If no .env, check if PostgreSQL is running locally via pg_isready
-#   3. Fall back to in-memory SQLite
+#   3. Otherwise abort: the schema is Postgres-only
 _dotenv = Path(__file__).resolve().parent.parent / ".env"
 _db_url = None
 _sync_db_url = None
@@ -27,33 +29,31 @@ elif shutil.which("pg_isready") and subprocess.run(
     _db_url = "postgresql+asyncpg:///sdf?host=/var/run/postgresql"
     _sync_db_url = "postgresql+psycopg2:///sdf?host=/var/run/postgresql"
 else:
-    _db_url = "sqlite+aiosqlite://"
-    _sync_db_url = "sqlite:///"
+    pytest.exit(
+        "PostgreSQL is required for tests: set DATABASE_URL in backend/.env or start PostgreSQL.",
+        returncode=1,
+    )
 
 # Use a separate test database so dev data is never touched
-if "postgresql" in _db_url:
-    import re
-    _db_url = re.sub(r"/sdf(\b)", r"/sdf_test\1", _db_url)
-    _sync_db_url = re.sub(r"/sdf(\b)", r"/sdf_test\1", _sync_db_url)
-    # Auto-create sdf_test if it doesn't exist (mirrors start.sh for sdf)
-    if shutil.which("psql"):
-        result = subprocess.run(
-            ["psql", "-h", "/var/run/postgresql", "-lqt"],
-            capture_output=True, text=True
+import re
+_db_url = re.sub(r"/sdf(\b)", r"/sdf_test\1", _db_url)
+_sync_db_url = re.sub(r"/sdf(\b)", r"/sdf_test\1", _sync_db_url)
+# Auto-create sdf_test if it doesn't exist (mirrors start.sh for sdf)
+if shutil.which("psql"):
+    result = subprocess.run(
+        ["psql", "-h", "/var/run/postgresql", "-lqt"],
+        capture_output=True, text=True
+    )
+    if "sdf_test" not in result.stdout:
+        subprocess.run(
+            ["createdb", "-h", "/var/run/postgresql", "sdf_test"],
+            capture_output=True
         )
-        if "sdf_test" not in result.stdout:
-            subprocess.run(
-                ["createdb", "-h", "/var/run/postgresql", "sdf_test"],
-                capture_output=True
-            )
-    print(f"Tests using PostgreSQL: {_db_url}")
-else:
-    print("Tests using in-memory SQLite")
+print(f"Tests using PostgreSQL: {_db_url}")
 
 os.environ.setdefault("DATABASE_URL", _db_url)
-os.environ.setdefault("SYNC_DATABASE_URL", _sync_db_url or "sqlite:///")
+os.environ.setdefault("SYNC_DATABASE_URL", _sync_db_url)
 
-import pytest
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from httpx import AsyncClient, ASGITransport
 
@@ -63,10 +63,9 @@ from app.main import app
 
 @pytest.fixture(scope="session")
 async def test_engine():
-    pool_kwargs = {}
-    if "sqlite" not in _db_url:
-        pool_kwargs = dict(pool_size=5, max_overflow=10, pool_pre_ping=True)
-    engine = create_async_engine(_db_url, echo=False, **pool_kwargs)
+    engine = create_async_engine(
+        _db_url, echo=False, pool_size=5, max_overflow=10, pool_pre_ping=True
+    )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     return engine
@@ -76,16 +75,11 @@ async def test_engine():
 async def clean_tables(test_engine):
     """Clean all rows before each test for isolation with persistent databases."""
     async with test_engine.begin() as conn:
-        if "sqlite" not in _db_url:
-            # PostgreSQL: TRUNCATE with CASCADE handles FK constraints
-            table_names = ", ".join(t.name for t in Base.metadata.sorted_tables)
-            if table_names:
-                from sqlalchemy import text
-                await conn.execute(text(f"TRUNCATE {table_names} CASCADE"))
-        else:
-            # SQLite: delete in reverse FK order
-            for table in reversed(Base.metadata.sorted_tables):
-                await conn.execute(table.delete())
+        # TRUNCATE with CASCADE handles FK constraints
+        table_names = ", ".join(t.name for t in Base.metadata.sorted_tables)
+        if table_names:
+            from sqlalchemy import text
+            await conn.execute(text(f"TRUNCATE {table_names} CASCADE"))
     yield
 
 

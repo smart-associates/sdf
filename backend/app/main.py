@@ -34,9 +34,6 @@ async def run_migrations():
     from sqlalchemy import text
     from sqlalchemy.exc import ProgrammingError
 
-    if engine.dialect.name == "sqlite":
-        return
-
     logger = logging.getLogger(__name__)
     migrations = [
         "ALTER TABLE job_execution_tables ADD COLUMN estimated_row_count INTEGER",
@@ -83,8 +80,7 @@ async def _migrate_source_tables_to_job_tables(engine, logger):
 
     One-time: each newline entry in source_tables becomes an include row (its
     schema/name split on the first dot), carrying the old job-wide table_filter.
-    Then the two legacy columns are dropped. Postgres-only (run_migrations returns
-    early on SQLite, where job_tables is built fresh from the model).
+    Then the two legacy columns are dropped. Postgres-only.
     """
     from sqlalchemy import text as _text
     from app.services.table_parser import parse_source_tables

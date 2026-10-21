@@ -23,7 +23,6 @@ Backend (Python)
 
 Package                   Version    License                                              Project
 -------------------------------------------------------------------------------------------------
-aiosqlite                 0.20.0     MIT License                                          https://aiosqlite.omnilib.dev
 alembic                   1.13.1     MIT License                                          https://alembic.sqlalchemy.org
 annotated-types           0.7.0      MIT License                                          https://github.com/annotated-types/annotated-types
 anyio                     4.12.1     MIT                                                  https://anyio.readthedocs.io/en/stable/versionhistory.html

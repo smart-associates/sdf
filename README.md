@@ -26,14 +26,14 @@ A web-based data migration tool for moving data between databases and file forma
 
 ```
 ┌─────────────────────────────────────────┐     ┌─────────────────────┐
-│  React build + FastAPI (single image)   │────▶│ PostgreSQL / SQLite │
+│  React build + FastAPI (single image)   │────▶│     PostgreSQL      │
 │              port 8000                  │     │  (auto-detected)    │
 └─────────────────────────────────────────┘     └─────────────────────┘
 ```
 
 - **Frontend:** React 18 + TypeScript + Tailwind CSS + TanStack Query (built and served as static assets by FastAPI)
 - **Backend:** FastAPI + SQLAlchemy (async) + Uvicorn
-- **Database:** PostgreSQL (auto-detected on host) or SQLite (in-container fallback, ephemeral)
+- **Database:** PostgreSQL (auto-detected on host, or a bundled ephemeral embedded instance in the container)
 
 ## Quick Start
 
@@ -52,8 +52,8 @@ docker compose pull && docker compose up
 ```
 
 The compose file uses `network_mode: host`, so the container auto-detects PostgreSQL on the
-host's `127.0.0.1:5432`. If none is reachable it falls back to an in-container SQLite
-database (ephemeral — no persistence). Override via env vars (see
+host's `127.0.0.1:5432`. If none is reachable it starts a bundled embedded PostgreSQL
+(ephemeral — no persistence). Override via env vars (see
 [GETTING_STARTED.md](GETTING_STARTED.md#option-1b-docker-compose)).
 
 > **macOS/Windows:** enable host networking in Docker Desktop under

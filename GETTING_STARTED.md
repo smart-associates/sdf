@@ -8,13 +8,13 @@
 ### Local dev path
 - Python 3.9+
 - Node.js 18+ and npm
-- PostgreSQL 14+ (optional — SQLite is used automatically if PostgreSQL is not running)
+- PostgreSQL 14+ (required for local dev via `start.sh` and for tests; the Docker image bundles one if none is reachable)
 
 ---
 
 ## Option 1: Docker
 
-The Docker build is a single unified image published at [`ghcr.io/smart-associates/sdf`](https://github.com/smart-associates/sdf/pkgs/container/sdf) on GitHub Container Registry. The image bundles the built React frontend + FastAPI backend, serving both on port 8000. There is **no Postgres container** — at startup the container tries to connect to PostgreSQL on the host, and if it can't reach one, it falls back to an in-container SQLite database (ephemeral, no volume).
+The Docker build is a single unified image published at [`ghcr.io/smart-associates/sdf`](https://github.com/smart-associates/sdf/pkgs/container/sdf) on GitHub Container Registry. The image bundles the built React frontend + FastAPI backend, serving both on port 8000. There is **no Postgres container** — at startup the container tries to connect to PostgreSQL on the host, and if it can't reach one, it starts a bundled embedded PostgreSQL inside the container (ephemeral, no volume).
 
 ### Option 1a: Plain `docker pull` + `docker run` (simplest)
 
@@ -149,7 +149,7 @@ host  all  all  ::1/128       trust
 ```
 Then `sudo systemctl reload postgresql`.
 
-If probe fails, the container uses `sqlite:////tmp/sdf.db` — fine for evaluation, but data is lost when the container exits. For persistent usage, fix the PG path above or pass `DATABASE_URL`.
+If probe fails, the container starts a bundled embedded PostgreSQL on a unix socket — fine for evaluation, but data is lost when the container exits. For persistent usage, fix the PG path above or pass `DATABASE_URL`.
 
 ### A note on host networking
 
@@ -171,10 +171,10 @@ With host networking the container binds port 8000 directly on the host (no `-p 
 
 `start.sh` auto-detects your database:
 - If PostgreSQL is running locally (checked via `pg_isready`), it connects over the unix socket
-- If PostgreSQL is not running, it falls back to a local SQLite database (`sdf.db`)
+- If PostgreSQL is not running, it exits with an error — start PostgreSQL or set `DATABASE_URL`
 
 This will:
-1. Auto-detect PostgreSQL or fall back to SQLite
+1. Auto-detect PostgreSQL (exit with an error if it is not running)
 2. Create a Python virtualenv in `backend/.venv`
 3. Install Python dependencies
 4. Start FastAPI on port 8000
@@ -296,7 +296,7 @@ source .venv/bin/activate
 python -m pytest -v
 ```
 
-Database detection mirrors `start.sh`: tests use PostgreSQL if a `backend/.env` file exists or if `pg_isready` succeeds, otherwise they use in-memory SQLite. When PostgreSQL is used, tests run against a separate `sdf_test` database (auto-created if needed) so your development data is never affected.
+Database detection mirrors `start.sh`: tests use PostgreSQL if a `backend/.env` file exists or if `pg_isready` succeeds, otherwise they abort with an error. Tests run against a separate `sdf_test` database (auto-created if needed) so your development data is never affected.
 
 ### Frontend (Vitest)
 
@@ -335,7 +335,7 @@ You can add additional custom settings via the Settings page or the `/api/settin
 
 **Backend won't start — database connection error**
 - If using PostgreSQL, make sure it's running (`pg_isready`) and the `sdf` database exists.
-- If no `.env` is present, `start.sh` auto-detects: PostgreSQL if running, otherwise SQLite.
+- If no `.env` is present, `start.sh` auto-detects PostgreSQL and exits with an error if it is not running.
 - The app creates tables automatically on startup; no manual migrations needed.
 
 **"Connection refused" when testing a connection**
@@ -358,8 +358,8 @@ You can add additional custom settings via the Settings page or the `/api/settin
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | No | auto-detected | Async DB connection string (asyncpg or aiosqlite) |
-| `SYNC_DATABASE_URL` | No | auto-detected | Sync DB connection string (psycopg2 or sqlite) |
+| `DATABASE_URL` | No | auto-detected | Async DB connection string (asyncpg) |
+| `SYNC_DATABASE_URL` | No | auto-detected | Sync DB connection string (psycopg2) |
 | `ENCRYPTION_KEY` | Yes | — | 32-char key for encrypting DB passwords |
 | `CORS_ORIGINS` | No | `["http://localhost:5173"]` | Allowed frontend origins |
 

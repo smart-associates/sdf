@@ -1,9 +1,7 @@
 """Tests for post-load schema migration: PK/index/CHECK on create, FKs as a
 post-load phase (issue #25).
 
-Runs real DDL against this test run's own Postgres database (skipped
-entirely on the SQLite fallback, since these are constraint/reflection
-behaviors that only make sense against a real relational engine). Source
+Runs real DDL against this test run's own Postgres database Source
 and target tables live in separate schemas within the same database, which
 both realistically simulates a same-server migration and avoids index-name
 collisions (Postgres scopes index names per-schema, not per-table).
@@ -16,12 +14,6 @@ import sqlalchemy as sa
 from sqlalchemy import text
 
 from app.services.migration_engine import create_target_table, migrate_foreign_keys
-
-pytestmark = pytest.mark.skipif(
-    "sqlite" in os.environ.get("SYNC_DATABASE_URL", ""),
-    reason="schema migration tests need a real Postgres engine",
-)
-
 
 @pytest.fixture
 def pg_engine():
