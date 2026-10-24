@@ -8,7 +8,7 @@ cryptography==50.0.1
 python-dotenv==1.2.3
 pydantic-settings==2.1.0
 alembic==1.13.1
-pyarrow==23.0.1
+pyarrow==26.0.0
 fastavro==1.9.3
 
 # Testing
