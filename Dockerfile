@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.6
 
 # --- Stage 1: build the React UI ---------------------------------------------
-FROM node:20-alpine AS ui-build
+FROM node:25-alpine AS ui-build
 WORKDIR /ui
 
 COPY ui/package.json ui/package-lock.json ./
