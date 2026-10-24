@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.17.0",
-    "axios": "^1.18.0",
+    "axios": "^1.20.0",
     "browserslist": "^4.28.9",
     "clsx": "^2.1.0",
     "form-data": "^4.0.6",
