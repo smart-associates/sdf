@@ -16,7 +16,7 @@ RUN npm run build
 
 
 # --- Stage 2: runtime (FastAPI + built UI) -----------------------------------
-FROM python:3.11-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 ARG SDF_VERSION=dev
 ARG SDF_GIT_SHA=unknown
